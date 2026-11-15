@@ -169,6 +169,34 @@ jobs:
           find release -type f -name '*.apk' -print
           test "$(find release -type f -name '*.apk' | wc -l)" -gt 0
 
+      - name: Create release tag and release entry
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = context.payload.inputs?.release_tag || 'v.03';
+            try {
+              await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `refs/tags/${tag}`, sha: context.sha });
+            }
+            try {
+              await github.rest.repos.getReleaseByTag({ owner: context.repo.owner, repo: context.repo.repo, tag });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: `v2rayNG ${tag}`,
+                body: 'Experimental build with restored TLS Allow Insecure support. The option remains disabled by default.',
+                draft: false,
+                prerelease: false
+              });
+            }
+
       - name: Upload APKs to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
