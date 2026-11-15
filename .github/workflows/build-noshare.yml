@@ -6,6 +6,10 @@ on:
       - noshare
   workflow_dispatch:
 
+concurrency:
+  group: shz-noshare-build
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -39,9 +43,6 @@ jobs:
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
           echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
-          sed -i '10i\\
-          \\
-              ndkVersion = "30.0.16248370"' "$GITHUB_WORKSPACE/V2rayNG/app/build.gradle.kts"
 
       - name: Restore cached libhevtun
         id: cache-libhevtun-restore
