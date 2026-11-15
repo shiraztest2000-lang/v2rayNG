@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.entities.SubscriptionUsageInfo
 import com.v2ray.ang.extension.toTrafficString
-import com.v2ray.ang.handler.SubscriptionInfoParser
 import com.v2ray.ang.util.Utils
 
 private const val MILLIS_PER_SECOND = 1000L
@@ -51,7 +50,6 @@ internal data class SubscriptionInfoUiModel(
     /** Expiry in epoch milliseconds; null when the subscription never expires. */
     val expireMillis: Long?,
     val expired: Boolean,
-    val supportUrl: String?,
     val webPageUrl: String?,
 ) {
     val trafficLow: Boolean get() = trafficFraction != null && trafficFraction >= TRAFFIC_WARNING_FRACTION
@@ -74,7 +72,6 @@ internal fun buildSubscriptionInfoUiModel(
         trafficFraction = if (unlimited) null else (info.used.toDouble() / info.total).toFloat().coerceIn(0f, 1f),
         expireMillis = expireMillis,
         expired = expireMillis != null && expireMillis <= nowMillis,
-        supportUrl = info.supportUrl,
         webPageUrl = info.webPageUrl,
     )
 }
@@ -112,17 +109,6 @@ internal fun SubscriptionInfoCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                model.supportUrl?.let { url ->
-                    CardIconButton(
-                        iconRes = if (SubscriptionInfoParser.isTelegramLink(url)) {
-                            R.drawable.ic_telegram_24dp
-                        } else {
-                            R.drawable.ic_feedback_24dp
-                        },
-                        contentDescription = stringResource(R.string.sub_info_open_support),
-                        onClick = { onOpenLink(url) },
-                    )
-                }
                 CardIconButton(
                     iconRes = R.drawable.ic_refresh_24dp,
                     contentDescription = stringResource(R.string.title_sub_update),
