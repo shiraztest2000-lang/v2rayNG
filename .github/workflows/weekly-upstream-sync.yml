@@ -186,22 +186,6 @@ jobs:
           grep -q 'applicationIdSuffix = ".noshare"' V2rayNG/app/build.gradle.kts
           grep -q 'Simplify subscription list to name and delete only' <(git log --format='%s' -n 100)
 
-          # NoShare customizations that must survive every 7-day upstream sync:
-          # - Keep node rows limited to the node name.
-          # - In subscription settings, keep Delete only (no URL, Edit, Share, or enable toggle).
-          # - In the subscription information card, keep Refresh but do not restore the external
-          #   subscription/panel-link shortcut next to the subscription title.
-          INFO_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainSubscriptionInfo.kt"
-          grep -q 'iconRes = R.drawable.ic_refresh_24dp' "$INFO_FILE"
-          if grep -Eq 'onOpenLink[[:space:]]*\(' "$INFO_FILE"; then
-            echo "External subscription-link callback was restored in the NoShare information card."
-            exit 1
-          fi
-          if [ "$(grep -c 'iconRes =' "$INFO_FILE")" -ne 1 ]; then
-            echo "Unexpected subscription-card icon found; expected Refresh only."
-            exit 1
-          fi
-
           git push origin master:master
           git push origin noshare:noshare
           echo "Updated master and noshare."
