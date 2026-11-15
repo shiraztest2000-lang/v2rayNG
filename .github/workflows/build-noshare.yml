@@ -141,6 +141,9 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"; then
             gh release delete-asset "$RELEASE_TAG" "SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk" --yes --repo "$GITHUB_REPOSITORY"
           fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk"; then
+            gh release delete-asset "$RELEASE_TAG" "SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk" --yes --repo "$GITHUB_REPOSITORY"
+          fi
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "SHZv2rayNG_noshare_v.2.4.1.001_universal.apk"; then
             gh release delete-asset "$RELEASE_TAG" "SHZv2rayNG_noshare_v.2.4.1.001_universal.apk" --yes --repo "$GITHUB_REPOSITORY"
           fi
