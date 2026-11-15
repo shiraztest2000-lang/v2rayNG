@@ -2,6 +2,8 @@
 
 # SHZv2rayNG
 
+![SHZv2rayNG logo](https://raw.githubusercontent.com/shiraztest2000-lang/v2rayNG/master/branding/SHZv2rayNG-logo.png)
+
 **A customized Android V2Ray client maintained by ShirazTipsy**
 
 [English](#english) · [فارسی](#فارسی) · [Latest Release](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
