@@ -88,9 +88,11 @@ jobs:
             ':!.github/workflows/weekly-upstream-sync.yml' \
             ':!.github/workflows/upstream-release-sync.yml' > "$MASTER_PATCH"
 
-          # Build the named "اصلاحات noshare" set from the net differences
-          # between the two current branches. This captures only NoShare-specific
-          # end-state changes, not reverted experiments or inherited master work.
+          # "اصلاحات noshare" is a separate user-customization layer, not an
+          # upstream update. Capture only the intentional end-state differences
+          # between the current master and noshare trees. This patch is reapplied
+          # after the ENTIRE noshare tree has been replaced by the updated master
+          # tree below; it must not carry forward old NoShare base files.
           git diff --binary origin/master origin/noshare -- . \
             ':!.github/upstream-version' \
             ':!.github/workflows/weekly-upstream-sync.yml' \
@@ -182,9 +184,16 @@ jobs:
           git commit -m "Apply اصلاحات شاخه master to upstream $UPSTREAM_TAG; prepare $NEW_VERSION"
           MASTER_SHA=$(git rev-parse HEAD)
 
-          # Copy every updated master file to NoShare first, then reapply only
-          # the saved "اصلاحات noshare" end-state patch on top of it.
+          # FULL REPLACEMENT: reset noshare to the exact newly-customized master
+          # commit. This replaces the complete previous noshare tree (all files,
+          # folders, workflows, resources and configuration) with master's tree.
+          # No old NoShare base content is retained.
           git checkout -B noshare "$MASTER_SHA"
+          test "$(git rev-parse HEAD)" = "$MASTER_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'master^{tree}')"
+
+          # REAPPLY USER CUSTOMIZATION: layer only the separately-maintained
+          # NoShare-specific changes onto the complete master tree.
           if ! git apply --3way --index "$NOSHARE_PATCH"; then
             echo "اصلاحات noshare could not be cleanly reapplied to the updated master files."
             git status --short
@@ -231,6 +240,10 @@ jobs:
           git diff --cached --check
           git commit -m "Apply اصلاحات noshare on top of $NEW_VERSION"
           NOSHARE_SHA=$(git rev-parse HEAD)
+
+          # The NoShare commit must directly descend from the exact master commit
+          # whose complete tree was copied before applying NoShare customizations.
+          test "$(git rev-parse "$NOSHARE_SHA^")" = "$MASTER_SHA"
 
           # Push both branches atomically: neither branch is updated if one push fails.
           git push --atomic origin "$MASTER_SHA:refs/heads/master" "$NOSHARE_SHA:refs/heads/noshare"
