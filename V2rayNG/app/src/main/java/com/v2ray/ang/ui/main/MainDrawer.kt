@@ -44,7 +44,7 @@ enum class MainDestination(@DrawableRes val iconRes: Int, @StringRes val labelRe
     Logcat(R.drawable.ic_logcat_24dp, R.string.title_logcat),
     CheckUpdate(R.drawable.ic_check_update_24dp, R.string.update_check_for_update),
     BackupRestore(R.drawable.ic_restore_24dp, R.string.title_configuration_backup_restore),
-    About(R.drawable.ic_about_24dp, R.string.title_about)
+    About(R.drawable.ic_about_24dp, R.string.menu_item_shiraz_tipsy)
 }
 
 private val primaryDrawerItems = listOf(
