@@ -106,7 +106,7 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod 755 gradlew
           ./gradlew assembleNoshareRelease -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" -Pandroid.injected.signing.store.password="$APP_KEYSTORE_PASSWORD" -Pandroid.injected.signing.key.alias="$APP_KEYSTORE_ALIAS" -Pandroid.injected.signing.key.password="$APP_KEY_PASSWORD"
-          VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' app/build.gradle.kts | head -n 1)
+          VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
           test -n "$VERSION_NAME"
           echo "RELEASE_TAG=$VERSION_NAME" >> "$GITHUB_ENV"
           APK="app/build/outputs/apk/noshare/release/SHZv2rayNG_noshare_${VERSION_NAME}_universal.apk"
