@@ -123,13 +123,6 @@ internal fun SubscriptionInfoCard(
                         onClick = { onOpenLink(url) },
                     )
                 }
-                model.webPageUrl?.let { url ->
-                    CardIconButton(
-                        iconRes = R.drawable.ic_about_24dp,
-                        contentDescription = stringResource(R.string.sub_info_open_page),
-                        onClick = { onOpenLink(url) },
-                    )
-                }
                 CardIconButton(
                     iconRes = R.drawable.ic_refresh_24dp,
                     contentDescription = stringResource(R.string.title_sub_update),
