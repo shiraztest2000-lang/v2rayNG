@@ -4,8 +4,6 @@
 
 **A customized Android V2Ray client maintained by ShirazTipsy**
 
-![SHZv2rayNG logo](branding/SHZv2rayNG-logo.png)
-
 [English](#english) · [فارسی](#فارسی) · [Latest Release](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
 
 [![Latest Release](https://img.shields.io/github/v/release/shiraztest2000-lang/v2rayNG?label=Release)](https://github.com/shiraztest2000-lang/v2rayNG/releases)
