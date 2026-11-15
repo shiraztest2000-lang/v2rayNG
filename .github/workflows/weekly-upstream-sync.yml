@@ -144,7 +144,18 @@ jobs:
 
           git push origin master:master
           git push origin noshare:noshare
-          echo "Updated master and noshare. Their build workflows will publish the new APKs."
+          echo "Updated master and noshare."
+
+      - name: Start both branch builds and publish the new release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.master-sync.outputs.release_tag }}
+        run: |
+          # GITHUB_TOKEN pushes do not start push-triggered workflows; dispatch both builds explicitly.
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
+          gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
+          echo "Dispatched master and NoShare builds for $RELEASE_TAG."
 
       - name: No upstream release found
         if: steps.check.outputs.changed != 'true'
