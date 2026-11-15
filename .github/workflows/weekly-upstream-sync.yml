@@ -78,8 +78,52 @@ jobs:
           UPSTREAM_TAG="${{ steps.check.outputs.upstream_tag }}"
           git checkout -B master origin/master
 
-          # Merge the upstream release without overwriting the fork's master customizations.
-          git merge --no-edit --no-ff "refs/tags/$UPSTREAM_TAG"
+          # Merge upstream first. The version fields and patched Xray submodule are intentional fork customizations.
+          CURRENT_UPSTREAM=$(cat .github/upstream-version 2>/dev/null || echo "2.4.0")
+          if ! git merge --no-commit --no-ff "refs/tags/$UPSTREAM_TAG"; then
+            CONFLICT_FILES=$(git diff --name-only --diff-filter=U | sort -u)
+            echo "Merge conflicts detected:"
+            printf '%s\n' "$CONFLICT_FILES"
+
+            if [ -z "$CONFLICT_FILES" ]; then
+              git merge --abort || true
+              echo "Merge failed without a recognized content conflict."
+              exit 1
+            fi
+
+            while IFS= read -r CONFLICT_FILE; do
+              case "$CONFLICT_FILE" in
+                AndroidLibXrayLite)
+                  echo "Keeping the fork's patched Xray core submodule so Allow Insecure remains available."
+                  ;;
+                V2rayNG/app/build.gradle.kts)
+                  UNEXPECTED=$(git diff --unified=0 "refs/tags/$CURRENT_UPSTREAM" "refs/tags/$UPSTREAM_TAG" -- "$CONFLICT_FILE" \
+                    | grep -E '^[+-]' \
+                    | grep -vE '^(---|\+\+\+|[+-][[:space:]]*(versionCode|versionName)[[:space:]]*=)' || true)
+                  if [ -n "$UNEXPECTED" ]; then
+                    git merge --abort || true
+                    echo "Upstream changed additional Gradle settings; refusing to discard them."
+                    printf '%s\n' "$UNEXPECTED"
+                    exit 1
+                  fi
+                  echo "Keeping local version fields; the workflow will advance them after the merge."
+                  ;;
+                *)
+                  git merge --abort || true
+                  echo "Unexpected conflict in $CONFLICT_FILE; refusing an unsafe automatic merge."
+                  exit 1
+                  ;;
+              esac
+            done <<< "$CONFLICT_FILES"
+
+            git merge --abort
+            git merge --no-commit --no-ff -X ours "refs/tags/$UPSTREAM_TAG"
+            if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+              git merge --abort || true
+              echo "Known-conflict merge did not resolve cleanly."
+              exit 1
+            fi
+          fi
 
           PREVIOUS_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
             --json tagName,createdAt \
