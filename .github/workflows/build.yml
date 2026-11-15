@@ -154,7 +154,7 @@ jobs:
   sign-and-release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
 
     steps:
       - name: Download APK artifacts
@@ -173,10 +173,10 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: release/**/*.apk
           file_glob: true
-          tag: ${{ inputs.release_tag }}
+          tag: ${{ inputs.release_tag || 'v0.1' }}
           overwrite: true
           prerelease: true
-          release_name: v2rayNG ${{ inputs.release_tag }}
+          release_name: v2rayNG ${{ inputs.release_tag || 'v0.1' }}
           body: |
             Experimental build with restored TLS Allow Insecure support.
             These APKs are signed with the CI test key unless a signing keystore is configured.
