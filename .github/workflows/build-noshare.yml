@@ -90,17 +90,24 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Decode signing keystore
-        if: ${{ env.APP_KEYSTORE_BASE64 != '' && env.APP_KEYSTORE_PASSWORD != '' && env.APP_KEYSTORE_ALIAS != '' && env.APP_KEY_PASSWORD != '' }}
-        uses: timheuer/base64-to-file@v2.0.0
-        id: android_keystore
-        with:
-          fileName: android_keystore.jks
-          encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
+      - name: Generate temporary signing keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/noshare-ci.keystore" \
+            -storepass android \
+            -keypass android \
+            -alias noshare-ci \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=SHZv2rayNG NoShare, OU=Android, O=ShirazTipsy, C=IR"
 
       - name: Build NoShare arm64-v8a APK
         env:
-          KEYSTORE_FILE: ${{ steps.android_keystore.outputs.filePath }}
+          KEYSTORE_FILE: ${{ runner.temp }}/noshare-ci.keystore
+          APP_KEYSTORE_PASSWORD: android
+          APP_KEYSTORE_ALIAS: noshare-ci
+          APP_KEY_PASSWORD: android
         run: |
           cd "$GITHUB_WORKSPACE/V2rayNG"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
