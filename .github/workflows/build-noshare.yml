@@ -133,7 +133,6 @@ jobs:
           if-no-files-found: error
 
       - name: Replace NoShare APK in the existing release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
