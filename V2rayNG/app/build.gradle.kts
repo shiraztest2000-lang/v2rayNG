@@ -59,6 +59,11 @@ android {
             dimension = "distribution"
             buildConfigField("String", "DISTRIBUTION", "\"Play Store\"")
         }
+        create("noshare") {
+            dimension = "distribution"
+            applicationIdSuffix = ".noshare"
+            buildConfigField("String", "DISTRIBUTION", "\"NoShare\"")
+        }
     }
 
     sourceSets {
@@ -82,7 +87,15 @@ android {
     applicationVariants.all {
         val variant = this
         val isFdroid = variant.productFlavors.any { it.name == "fdroid" }
-        if (isFdroid) {
+        val isNoShare = variant.productFlavors.any { it.name == "noshare" }
+        if (isNoShare) {
+            variant.outputs
+                .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
+                .forEach { output ->
+                    val abi = output.getFilter("ABI") ?: "universal"
+                    output.outputFileName = "SHZv2rayNG1_${variant.versionName}_${abi}.apk"
+                }
+        } else if (isFdroid) {
             val versionCodes =
                 mapOf(
                     "armeabi-v7a" to 2, "arm64-v8a" to 1, "x86" to 4, "x86_64" to 3, "universal" to 0
