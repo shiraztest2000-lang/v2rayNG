@@ -124,33 +124,43 @@ fun GroupPagerPage(
         )
     }
 
-    Box(Modifier.fillMaxSize()) {
-        ServerListPage(
-            rows = groupState.rows,
-            selectedGuid = selectedGuid,
-            locateTarget = locateTarget?.takeIf { it.groupId == groupId },
-            canReorder = canReorder,
-            doubleColumnDisplay = doubleColumnDisplay,
-            groupId = groupId,
-            lazyListStates = lazyListStates,
-            lazyGridStates = lazyGridStates,
-            actions = actions,
-            onLocateHandled = { mainViewModel.onAction(MainAction.LocateHandled) },
-            onMoveServer = { fromIndex, toIndex ->
-                mainViewModel.moveServer(groupId, fromIndex, toIndex)
-            },
-            contentPadding = listPadding
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            text = stringResource(R.string.main_edited_by),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (usageInfo != null) {
-            SubscriptionInfoCard(
-                info = usageInfo,
-                fallbackTitle = groupTitle,
-                onOpenLink = onOpenLink,
-                onRefresh = { mainViewModel.onAction(MainAction.UpdateGroupSubscription(groupId)) },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .onSizeChanged { infoHeightPx = it.height }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            ServerListPage(
+                rows = groupState.rows,
+                selectedGuid = selectedGuid,
+                locateTarget = locateTarget?.takeIf { it.groupId == groupId },
+                canReorder = canReorder,
+                doubleColumnDisplay = doubleColumnDisplay,
+                groupId = groupId,
+                lazyListStates = lazyListStates,
+                lazyGridStates = lazyGridStates,
+                actions = actions,
+                onLocateHandled = { mainViewModel.onAction(MainAction.LocateHandled) },
+                onMoveServer = { fromIndex, toIndex ->
+                    mainViewModel.moveServer(groupId, fromIndex, toIndex)
+                },
+                contentPadding = listPadding
             )
+            if (usageInfo != null) {
+                SubscriptionInfoCard(
+                    info = usageInfo,
+                    fallbackTitle = groupTitle,
+                    onOpenLink = onOpenLink,
+                    onRefresh = { mainViewModel.onAction(MainAction.UpdateGroupSubscription(groupId)) },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .onSizeChanged { infoHeightPx = it.height }
+                )
+            }
         }
     }
 }
