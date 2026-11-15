@@ -10,7 +10,7 @@ on:
       release_tag:
         description: 'GitHub release tag to publish (for example v.2.4.1.001)'
         required: false
-        default: 'v.2.4.1.001'
+        default: ''
         type: string
   pull_request:
     branches:
@@ -25,6 +25,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.app-version.outputs.release_tag }}
     env:
       APP_KEYSTORE_BASE64: ${{ secrets.APP_KEYSTORE_BASE64 }}
       APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
@@ -37,6 +39,13 @@ jobs:
       with:
         submodules: 'recursive'
         fetch-depth: '0'
+
+    - name: Read release version
+      id: app-version
+      run: |
+        VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+        test -n "$VERSION_NAME"
+        echo "release_tag=$VERSION_NAME" >> "$GITHUB_OUTPUT"
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
@@ -160,7 +169,7 @@ jobs:
   sign-and-release:
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Download APK artifacts
@@ -173,59 +182,48 @@ jobs:
           find release -type f -name '*.apk' -print
           test "$(find release -type f -name '*.apk' | wc -l)" -gt 0
 
-      - name: Create release tag and release entry
+      - name: Create or reuse version release
+        id: release-info
         uses: actions/github-script@v9
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          BUILD_RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const tag = context.payload.inputs?.release_tag || 'v.2.4.1.001';
-            // Remove every previous GitHub Release and its APK assets.
-            const releases = await github.paginate(github.rest.repos.listReleases, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 100
-            });
-            for (const release of releases) {
-              await github.rest.repos.deleteRelease({
+            const tag = process.env.INPUT_RELEASE_TAG || process.env.BUILD_RELEASE_TAG;
+            if (!tag) throw new Error('Could not determine the release tag from app versionName.');
+
+            // Create the tag only when it does not already exist. Never delete or move old tags.
+            try {
+              await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.id
+                ref: `refs/tags/${tag}`,
+                sha: context.sha
               });
             }
 
-            // Remove all old version tags, including a previous tag with this exact name.
-            const tagRefs = await github.paginate(github.rest.git.listMatchingRefs, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'tags/',
-              per_page: 100
-            });
-            for (const tagRef of tagRefs) {
-              const shortName = tagRef.ref.replace('refs/tags/', '');
-              await github.rest.git.deleteRef({
+            // Keep every previous release. Reuse this version's release if a prior run created it.
+            try {
+              await github.rest.repos.getReleaseByTag({ owner: context.repo.owner, repo: context.repo.repo, tag });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                ref: `tags/${shortName}`
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: `SHZv2rayNG ${tag}`,
+                body: 'SHZv2rayNG release. Allow Insecure remains disabled by default.',
+                draft: false,
+                prerelease: false
               });
             }
-
-            // Publish only the requested version tag and release.
-            await github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `refs/tags/${tag}`,
-              sha: context.sha
-            });
-            await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: tag,
-              target_commitish: context.sha,
-              name: `SHZv2rayNG ${tag}`,
-              body: 'SHZv2rayNG release. Allow Insecure remains disabled by default.',
-              draft: false,
-              prerelease: false
-            });
+            core.setOutput('tag', tag);
 
       - name: Upload APKs to GitHub Release
         uses: svenstaro/upload-release-action@v2
@@ -233,11 +231,11 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: release/**/*.apk
           file_glob: true
-          tag: ${{ inputs.release_tag || 'v.2.4.1.001' }}
+          tag: ${{ steps.release-info.outputs.tag }}
           overwrite: true
           prerelease: false
-          release_name: SHZv2rayNG ${{ inputs.release_tag || 'v.2.4.1.001' }}
+          release_name: SHZv2rayNG ${{ steps.release-info.outputs.tag }}
           body: |
-            SHZv2rayNG ${{ inputs.release_tag || 'v.2.4.1.001' }}.
+            SHZv2rayNG ${{ steps.release-info.outputs.tag }}.
             Allow Insecure remains disabled by default.
             These APKs are signed with the configured keystore when available; otherwise they use a CI test key.
