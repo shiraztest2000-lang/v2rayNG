@@ -17,7 +17,7 @@ jobs:
   sync-and-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout master with full history and submodules
+      - name: Checkout primary branch (Git ref: master) with full history and submodules
         uses: actions/checkout@v7
         with:
           ref: master
@@ -68,7 +68,7 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "upstream_tag=$LATEST" >> "$GITHUB_OUTPUT"
 
-      - name: Apply اصلاحات master, then apply اصلاحات noshare
+      - name: Apply اصلاحات شاخه اصلی, then apply اصلاحات noshare
         id: apply-customizations
         if: steps.check.outputs.changed == 'true'
         env:
@@ -77,11 +77,11 @@ jobs:
           set -euo pipefail
           UPSTREAM_TAG="${{ steps.check.outputs.upstream_tag }}"
           CURRENT_UPSTREAM=$(cat .github/upstream-version 2>/dev/null || echo "2.4.0")
-          MASTER_PATCH="$RUNNER_TEMP/master-customizations.patch"
+          MASTER_PATCH="$RUNNER_TEMP/primary-branch-customizations.patch"
           NOSHARE_PATCH="$RUNNER_TEMP/noshare-customizations.patch"
 
-          # Build the named "اصلاحات master" set from the last synchronized
-          # upstream release to the current master branch. Keep build.yml and
+          # Build the named "اصلاحات شاخه اصلی" set from the last synchronized
+          # upstream release to the current primary branch. Keep build.yml and
           # all successful app customizations; exclude only sync bookkeeping.
           git diff --binary "$CURRENT_UPSTREAM" origin/master -- . \
             ':!.github/upstream-version' \
@@ -97,7 +97,7 @@ jobs:
             ':!.github/workflows/upstream-release-sync.yml' > "$NOSHARE_PATCH"
 
           if [ ! -s "$MASTER_PATCH" ]; then
-            echo "The اصلاحات master patch is empty; refusing to overwrite master."
+            echo "The اصلاحات شاخه اصلی patch is empty; refusing to overwrite master."
             exit 1
           fi
           if [ ! -s "$NOSHARE_PATCH" ]; then
@@ -105,7 +105,7 @@ jobs:
             exit 1
           fi
 
-          echo "اصلاحات master:"
+          echo "اصلاحات شاخه اصلی:"
           git diff --stat "$CURRENT_UPSTREAM" origin/master -- . \
             ':!.github/upstream-version' \
             ':!.github/workflows/weekly-upstream-sync.yml' \
@@ -116,10 +116,10 @@ jobs:
             ':!.github/workflows/weekly-upstream-sync.yml' \
             ':!.github/workflows/upstream-release-sync.yml'
 
-          # Start from the new official source release and reapply اصلاحات master.
+          # Start from the new official source release and reapply اصلاحات شاخه اصلی.
           git checkout -B master "refs/tags/$UPSTREAM_TAG"
           if ! git apply --3way --index "$MASTER_PATCH"; then
-            echo "اصلاحات master could not be cleanly reapplied to the new upstream source."
+            echo "اصلاحات شاخه اصلی could not be cleanly reapplied to the new upstream source."
             git status --short
             exit 1
           fi
@@ -138,22 +138,22 @@ jobs:
             --json tagName,createdAt \
             | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
           if [ -n "$PREVIOUS_RELEASE" ]; then
-            LAST_SUFFIX="\${PREVIOUS_RELEASE##*.}"
+            LAST_SUFFIX="${PREVIOUS_RELEASE##*.}"
           else
             CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "v\?\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
-            LAST_SUFFIX="\${CURRENT_VERSION##*.}"
+            LAST_SUFFIX="${CURRENT_VERSION##*.}"
           fi
           if ! [[ "$LAST_SUFFIX" =~ ^[0-9]+$ ]]; then
             echo "Could not determine the previous three-digit release suffix."
             exit 1
           fi
           NEXT_SUFFIX=$(printf '%03d' "$((10#$LAST_SUFFIX + 1))")
-          VERSION_BASE="\${UPSTREAM_TAG#v}"
-          NEW_VERSION="v.\${VERSION_BASE}.\${NEXT_SUFFIX}"
+          VERSION_BASE="${UPSTREAM_TAG#v}"
+          NEW_VERSION="v.${VERSION_BASE}.${NEXT_SUFFIX}"
 
           CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
           if ! [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]; then
-            echo "Could not read versionCode after applying اصلاحات master."
+            echo "Could not read versionCode after applying اصلاحات شاخه اصلی."
             exit 1
           fi
           NEW_CODE=$((CURRENT_CODE + 1))
@@ -179,7 +179,7 @@ jobs:
 
           git add -A
           git diff --cached --check
-          git commit -m "Apply اصلاحات master to upstream $UPSTREAM_TAG; prepare $NEW_VERSION"
+          git commit -m "Apply اصلاحات شاخه اصلی to upstream $UPSTREAM_TAG; prepare $NEW_VERSION"
           MASTER_SHA=$(git rev-parse HEAD)
 
           # Copy every updated master file to NoShare first, then reapply only
@@ -239,7 +239,7 @@ jobs:
           echo "master_sha=$MASTER_SHA" >> "$GITHUB_OUTPUT"
           echo "noshare_sha=$NOSHARE_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Build master APKs and create the new release
+      - name: Build primary-branch APKs and create the new release
         if: steps.check.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
