@@ -19,6 +19,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      APP_KEYSTORE_BASE64: ${{ secrets.APP_KEYSTORE_BASE64 }}
+      APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
+      APP_KEYSTORE_ALIAS: ${{ secrets.APP_KEYSTORE_ALIAS }}
+      APP_KEY_PASSWORD: ${{ secrets.APP_KEY_PASSWORD }}
 
     steps:
     - name: Checkout code
@@ -94,7 +99,7 @@ jobs:
         java-version: '21'
 
     - name: Decode Keystore
-      if: ${{ secrets.APP_KEYSTORE_BASE64 != '' && secrets.APP_KEYSTORE_PASSWORD != '' && secrets.APP_KEYSTORE_ALIAS != '' && secrets.APP_KEY_PASSWORD != '' }}
+      if: ${{ env.APP_KEYSTORE_BASE64 != '' && env.APP_KEYSTORE_PASSWORD != '' && env.APP_KEYSTORE_ALIAS != '' && env.APP_KEY_PASSWORD != '' }}
       uses: timheuer/base64-to-file@v2.0.0
       id: android_keystore
       with:
@@ -103,10 +108,6 @@ jobs:
 
     - name: Build APK
       env:
-        APP_KEYSTORE_BASE64: ${{ secrets.APP_KEYSTORE_BASE64 }}
-        APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
-        APP_KEYSTORE_ALIAS: ${{ secrets.APP_KEYSTORE_ALIAS }}
-        APP_KEY_PASSWORD: ${{ secrets.APP_KEY_PASSWORD }}
         KEYSTORE_FILE: ${{ steps.android_keystore.outputs.filePath }}
       run: |
         cd ${{ github.workspace }}/V2rayNG
