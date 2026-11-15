@@ -1,0 +1,150 @@
+name: Build NoShare Universal APK
+
+on:
+  push:
+    branches:
+      - noshare
+  workflow_dispatch:
+
+concurrency:
+  group: shz-noshare-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-noshare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout noshare branch
+        uses: actions/checkout@v7
+        with:
+          ref: noshare
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '14742923'
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save cached libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r libs "$GITHUB_WORKSPACE/V2rayNG/app"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: AndroidLibXrayLite/go.mod
+
+      - name: Build libv2ray
+        run: |
+          cd AndroidLibXrayLite
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          mkdir -p assets data
+          bash gen_assets.sh download
+          cp -v data/*.dat assets/
+          gomobile init
+          go mod tidy
+          gomobile bind -v -androidapi 24 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' ./
+          mkdir -p ../V2rayNG/app/libs
+          cp -v libv2ray.aar ../V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Generate temporary signing keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/noshare-ci.keystore" \
+            -storepass android \
+            -keypass android \
+            -alias noshare-ci \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=SHZv2rayNG NoShare, OU=Android, O=ShirazTipsy, C=IR"
+
+      - name: Build NoShare Universal APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/noshare-ci.keystore
+          APP_KEYSTORE_PASSWORD: android
+          APP_KEYSTORE_ALIAS: noshare-ci
+          APP_KEY_PASSWORD: android
+        run: |
+          cd "$GITHUB_WORKSPACE/V2rayNG"
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          ./gradlew assembleNoshareRelease -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" -Pandroid.injected.signing.store.password="$APP_KEYSTORE_PASSWORD" -Pandroid.injected.signing.key.alias="$APP_KEYSTORE_ALIAS" -Pandroid.injected.signing.key.password="$APP_KEY_PASSWORD"
+          VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          test -n "$VERSION_NAME"
+          echo "RELEASE_TAG=$VERSION_NAME" >> "$GITHUB_ENV"
+          APK="app/build/outputs/apk/noshare/release/SHZv2rayNG_noshare_${VERSION_NAME}_universal.apk"
+          test -s "$APK"
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          cp "$APK" "$GITHUB_WORKSPACE/release/"
+
+      - name: Verify APK package and universal ABI
+        run: |
+          APK="$GITHUB_WORKSPACE/release/SHZv2rayNG_noshare_${RELEASE_TAG}_universal.apk"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.v2ray.ang.shz.noshare'"
+          BADGING=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK")
+          for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
+            echo "$BADGING" | grep -F "'$ABI'" >/dev/null || { echo "Missing ABI in universal APK: $ABI"; exit 1; }
+          done
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose --print-certs "$APK"
+          echo "APK signing verification passed."
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SHZv2rayNG-noshare-universal
+          path: release/SHZv2rayNG_noshare_${{ env.RELEASE_TAG }}_universal.apk
+          if-no-files-found: error
+
+      - name: Replace NoShare APK in the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The master workflow creates the version release; wait for it before uploading.
+          for ATTEMPT in $(seq 1 60); do
+            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              break
+            fi
+            echo "Waiting for release $RELEASE_TAG to be created by the master build... ($ATTEMPT/60)"
+            sleep 30
+          done
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          APK="release/SHZv2rayNG_noshare_${RELEASE_TAG}_universal.apk"
+          test -s "$APK"
+          gh release upload "$RELEASE_TAG" "$APK" --clobber --repo "$GITHUB_REPOSITORY"
