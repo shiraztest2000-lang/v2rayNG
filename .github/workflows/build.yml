@@ -4,8 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
+        description: 'GitHub release tag to publish (for example v.03)'
         required: false
+        default: 'v.03'
         type: string
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - master
@@ -16,6 +21,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      APP_KEYSTORE_BASE64: ${{ secrets.APP_KEYSTORE_BASE64 }}
+      APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
+      APP_KEYSTORE_ALIAS: ${{ secrets.APP_KEYSTORE_ALIAS }}
+      APP_KEY_PASSWORD: ${{ secrets.APP_KEY_PASSWORD }}
 
     steps:
     - name: Checkout code
@@ -37,6 +47,7 @@ jobs:
           --channel=0 \
           --install "ndk;30.0.16248370"
         echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
         sed -i '10i\
         \
             ndkVersion = "30.0.16248370"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
@@ -64,21 +75,24 @@ jobs:
       run: |
         cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-    - name: Fetch AndroidLibXrayLite tag
-      run: |
-        pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
-        echo "Current tag in this repo: $CURRENT_TAG"
-        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
-
-    - name: Download libv2ray
-      uses: robinraju/release-downloader@v1.13
+    - name: Setup Go for AndroidLibXrayLite
+      uses: actions/setup-go@v6
       with:
-        repository: '2dust/AndroidLibXrayLite'
-        tag: ${{ env.CURRENT_TAG }}
-        fileName: 'libv2ray.aar'
-        out-file-path: V2rayNG/app/libs/
+        go-version-file: 'AndroidLibXrayLite/go.mod'
+
+    - name: Build libv2ray from the patched Xray core
+      run: |
+        cd AndroidLibXrayLite
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        export PATH="$PATH:$(go env GOPATH)/bin"
+        mkdir -p assets data
+        bash gen_assets.sh download
+        cp -v data/*.dat assets/
+        gomobile init
+        go mod tidy
+        gomobile bind -v -androidapi 24 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' ./
+        mkdir -p ../V2rayNG/app/libs
+        cp -v libv2ray.aar ../V2rayNG/app/libs/
 
     - name: Setup Java
       uses: actions/setup-java@v6.2.0
@@ -87,6 +101,7 @@ jobs:
         java-version: '21'
 
     - name: Decode Keystore
+      if: ${{ env.APP_KEYSTORE_BASE64 != '' && env.APP_KEYSTORE_PASSWORD != '' && env.APP_KEYSTORE_ALIAS != '' && env.APP_KEY_PASSWORD != '' }}
       uses: timheuer/base64-to-file@v2.0.0
       id: android_keystore
       with:
@@ -94,12 +109,21 @@ jobs:
         encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
 
     - name: Build APK
+      env:
+        KEYSTORE_FILE: ${{ steps.android_keystore.outputs.filePath }}
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
         ./gradlew licenseFdroidReleaseReport
-        ./gradlew assembleRelease -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
+        if [ -n "$APP_KEYSTORE_BASE64" ] && [ -n "$APP_KEYSTORE_PASSWORD" ] && [ -n "$APP_KEYSTORE_ALIAS" ] && [ -n "$APP_KEY_PASSWORD" ]; then
+          echo "Building APKs with the configured signing keystore."
+          ./gradlew assembleRelease -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" -Pandroid.injected.signing.store.password="$APP_KEYSTORE_PASSWORD" -Pandroid.injected.signing.key.alias="$APP_KEYSTORE_ALIAS" -Pandroid.injected.signing.key.password="$APP_KEY_PASSWORD"
+        else
+          echo "Signing secrets are unavailable; generating a temporary CI-only signing key for test APKs."
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/ci-test.keystore" -storepass android -keypass android -alias ci-test -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=CI Test,O=Android,C=US"
+          ./gradlew assembleRelease -Pandroid.injected.signing.store.file="$RUNNER_TEMP/ci-test.keystore" -Pandroid.injected.signing.store.password=android -Pandroid.injected.signing.key.alias=ci-test -Pandroid.injected.signing.key.password=android
+        fi
     
     - name: Upload arm64-v8a APK
       uses: actions/upload-artifact@v7
@@ -131,8 +155,8 @@ jobs:
 
   sign-and-release:
     needs: build
-    runs-on: ubuntu-26.04
-    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
 
     steps:
       - name: Download APK artifacts
@@ -140,23 +164,50 @@ jobs:
         with:
           path: release
 
-      - name: Sign APK files
+      - name: List APKs to publish
         run: |
-          printf '%s' "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
-          KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
-          mkdir -p release-files
+          find release -type f -name '*.apk' -print
+          test "$(find release -type f -name '*.apk' | wc -l)" -gt 0
 
-          find release -type f -name '*.apk' | while read apk; do
-            cp "$apk" release-files/
-            gpg --batch --yes --local-user "$KEY" --detach-sign --output "release-files/$(basename "$apk").sig" "$apk"
-          done
+      - name: Create release tag and release entry
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = context.payload.inputs?.release_tag || 'v.03';
+            try {
+              await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `refs/tags/${tag}`, sha: context.sha });
+            }
+            try {
+              await github.rest.repos.getReleaseByTag({ owner: context.repo.owner, repo: context.repo.repo, tag });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: `v2rayNG ${tag}`,
+                body: 'Experimental build with restored TLS Allow Insecure support. The option remains disabled by default.',
+                draft: false,
+                prerelease: false
+              });
+            }
 
-          gpg --armor --export "$KEY" > release-files/v2rayN-public-key.asc
-
-      - name: Upload APKs, signatures and public key to release
+      - name: Upload APKs to GitHub Release
         uses: svenstaro/upload-release-action@v2
         with:
-          file: release-files/*
-          tag: ${{ inputs.release_tag }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: release/**/*.apk
           file_glob: true
-          prerelease: true
+          tag: ${{ inputs.release_tag || 'v.03' }}
+          overwrite: true
+          prerelease: false
+          release_name: v2rayNG ${{ inputs.release_tag || 'v.03' }}
+          body: |
+            Experimental build with restored TLS Allow Insecure support.
+            These APKs are signed with the CI test key unless a signing keystore is configured.
+            They cannot update the official v2rayNG app signed with a different key.
