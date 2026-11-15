@@ -16,9 +16,6 @@ permissions:
 jobs:
   build-noshare:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: v.2.4.1.001
-
     steps:
       - name: Checkout noshare branch
         uses: actions/checkout@v7
@@ -109,14 +106,17 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod 755 gradlew
           ./gradlew assembleNoshareRelease -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" -Pandroid.injected.signing.store.password="$APP_KEYSTORE_PASSWORD" -Pandroid.injected.signing.key.alias="$APP_KEYSTORE_ALIAS" -Pandroid.injected.signing.key.password="$APP_KEY_PASSWORD"
-          APK="app/build/outputs/apk/noshare/release/SHZv2rayNG_noshare_v.2.4.1.001_universal.apk"
+          VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' app/build.gradle.kts | head -n 1)
+          test -n "$VERSION_NAME"
+          echo "RELEASE_TAG=$VERSION_NAME" >> "$GITHUB_ENV"
+          APK="app/build/outputs/apk/noshare/release/SHZv2rayNG_noshare_${VERSION_NAME}_universal.apk"
           test -s "$APK"
           mkdir -p "$GITHUB_WORKSPACE/release"
           cp "$APK" "$GITHUB_WORKSPACE/release/"
 
       - name: Verify APK package and universal ABI
         run: |
-          APK="$GITHUB_WORKSPACE/release/SHZv2rayNG_noshare_v.2.4.1.001_universal.apk"
+          APK="$GITHUB_WORKSPACE/release/SHZv2rayNG_noshare_${RELEASE_TAG}_universal.apk"
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.v2ray.ang.shz.noshare'"
           BADGING=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK")
           for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
@@ -129,22 +129,22 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: SHZv2rayNG-noshare-universal
-          path: release/SHZv2rayNG_noshare_v.2.4.1.001_universal.apk
+          path: release/SHZv2rayNG_noshare_${{ env.RELEASE_TAG }}_universal.apk
           if-no-files-found: error
 
       - name: Replace NoShare APK in the existing release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Keep the existing v.2.4.1.001 release and replace only its NoShare APK.
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
-          for ASSET in "SHZv2rayNG_noshare_v.2.4.1.001_universal.apk" "SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk" "SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"; do
-            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$ASSET"; then
-              gh release delete-asset "$RELEASE_TAG" "$ASSET" --yes --repo "$GITHUB_REPOSITORY"
+          # The master workflow creates the version release; wait for it before uploading.
+          for ATTEMPT in $(seq 1 60); do
+            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              break
             fi
+            echo "Waiting for release $RELEASE_TAG to be created by the master build... ($ATTEMPT/60)"
+            sleep 30
           done
-          gh release upload "$RELEASE_TAG" release/SHZv2rayNG_noshare_v.2.4.1.001_universal.apk --repo "$GITHUB_REPOSITORY"
-          # Remove the accidental 002 release created by the previous workflow run.
-          if gh release view "v.2.4.1.002" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "v.2.4.1.002" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
-          fi
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          APK="release/SHZv2rayNG_noshare_${RELEASE_TAG}_universal.apk"
+          test -s "$APK"
+          gh release upload "$RELEASE_TAG" "$APK" --clobber --repo "$GITHUB_REPOSITORY"
