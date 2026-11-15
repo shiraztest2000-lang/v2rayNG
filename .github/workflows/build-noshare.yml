@@ -17,10 +17,6 @@ jobs:
   build-noshare:
     runs-on: ubuntu-latest
     env:
-      APP_KEYSTORE_BASE64: ${{ secrets.APP_KEYSTORE_BASE64 }}
-      APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
-      APP_KEYSTORE_ALIAS: ${{ secrets.APP_KEYSTORE_ALIAS }}
-      APP_KEY_PASSWORD: ${{ secrets.APP_KEY_PASSWORD }}
       RELEASE_TAG: v.2.4.1.001
 
     steps:
@@ -112,10 +108,6 @@ jobs:
           cd "$GITHUB_WORKSPACE/V2rayNG"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod 755 gradlew
-          if [ -z "$APP_KEYSTORE_BASE64" ] || [ -z "$APP_KEYSTORE_PASSWORD" ] || [ -z "$APP_KEYSTORE_ALIAS" ] || [ -z "$APP_KEY_PASSWORD" ]; then
-            echo "::error::Stable Android signing is not configured. Add APP_KEYSTORE_BASE64, APP_KEYSTORE_PASSWORD, APP_KEYSTORE_ALIAS, and APP_KEY_PASSWORD as GitHub Actions secrets."
-            exit 1
-          fi
           ./gradlew assembleNoshareRelease -PABI_FILTERS=arm64-v8a -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" -Pandroid.injected.signing.store.password="$APP_KEYSTORE_PASSWORD" -Pandroid.injected.signing.key.alias="$APP_KEYSTORE_ALIAS" -Pandroid.injected.signing.key.password="$APP_KEY_PASSWORD"
           APK="app/build/outputs/apk/noshare/release/SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk"
           test -s "$APK"
