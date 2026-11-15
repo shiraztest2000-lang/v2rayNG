@@ -23,7 +23,7 @@ jobs:
           ref: master
           fetch-depth: 0
           submodules: recursive
-          token: \${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure remotes and fetch source releases
         run: |
@@ -72,10 +72,11 @@ jobs:
         id: apply-customizations
         if: steps.check.outputs.changed == 'true'
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          UPSTREAM_TAG="\${{ steps.check.outputs.upstream_tag }}"
+          UPSTREAM_TAG="${{ steps.check.outputs.upstream_tag }}"
+          CURRENT_UPSTREAM=$(cat .github/upstream-version 2>/dev/null || echo "2.4.0")
           MASTER_PATCH="$RUNNER_TEMP/master-customizations.patch"
           NOSHARE_PATCH="$RUNNER_TEMP/noshare-customizations.patch"
 
@@ -241,8 +242,8 @@ jobs:
       - name: Build master APKs and create the new release
         if: steps.check.outputs.changed == 'true'
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: \${{ steps.apply-customizations.outputs.release_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.apply-customizations.outputs.release_tag }}
         run: |
           set -euo pipefail
           gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
@@ -250,7 +251,7 @@ jobs:
       - name: Build NoShare APK and add it to the same release
         if: steps.check.outputs.changed == 'true'
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
