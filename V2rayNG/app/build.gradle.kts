@@ -94,7 +94,7 @@ android {
                 .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
                 .forEach { output ->
                     val abi = output.getFilter("ABI") ?: "universal"
-                    output.outputFileName = "SHZv2rayNG1_${variant.versionName}_${abi}.apk"
+                    output.outputFileName = "SHZv2rayNG_noshare_${variant.versionName}_${abi}.apk"
                 }
         } else if (isFdroid) {
             val versionCodes =
