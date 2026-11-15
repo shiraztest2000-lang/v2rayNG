@@ -236,6 +236,7 @@ jobs:
             exit 1
           fi
 
+          git diff --check
           git commit -m "Reapply complete NoShare customizations after upstream sync"
           git push origin master:master
           git push origin noshare:noshare
