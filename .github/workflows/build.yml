@@ -173,10 +173,10 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: release/**/*.apk
           file_glob: true
-          tag: ${{ inputs.release_tag || 'v0.1' }}
+          tag: ${{ inputs.release_tag || 'v.03' }}
           overwrite: true
           prerelease: true
-          release_name: v2rayNG ${{ inputs.release_tag || 'v0.1' }}
+          release_name: v2rayNG ${{ inputs.release_tag || 'v.03' }}
           body: |
             Experimental build with restored TLS Allow Insecure support.
             These APKs are signed with the CI test key unless a signing keystore is configured.
