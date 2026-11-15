@@ -1,0 +1,260 @@
+name: Upstream release sync and rebuild
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: upstream-release-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master with full history and submodules
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+          submodules: recursive
+          token: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure remotes and fetch source releases
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/2dust/v2rayNG.git
+          git fetch origin --prune '+refs/heads/*:refs/remotes/origin/*'
+          git fetch upstream --tags --force
+          test -f .github/workflows/upstream-release-sync.yml
+          cp .github/workflows/upstream-release-sync.yml "$RUNNER_TEMP/upstream-release-sync.yml"
+
+      - name: Check for a newer upstream release
+        id: check
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -fsSL https://api.github.com/repos/2dust/v2rayNG/releases?per_page=100 \
+            | jq -r '[.[] | select(.draft == false)][0].tag_name // empty')
+          CURRENT=$(cat .github/upstream-version 2>/dev/null || echo "2.4.0")
+          if [ -z "$LATEST" ]; then
+            echo "Could not determine the latest upstream release."
+            exit 1
+          fi
+
+          echo "Current synchronized upstream release: $CURRENT"
+          echo "Latest upstream release: $LATEST"
+
+          if [ "$LATEST" = "$CURRENT" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new upstream release. No files, branches, tags, or releases will be changed."
+            exit 0
+          fi
+
+          NEWEST=$(printf '%s\n%s\n' "$CURRENT" "$LATEST" | sort -V | tail -n 1)
+          if [ "$NEWEST" != "$LATEST" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The latest upstream release is not newer. Nothing to do."
+            exit 0
+          fi
+
+          git rev-parse -q --verify "refs/tags/$LATEST^{commit}" >/dev/null
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "upstream_tag=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Apply اصلاحات master, then apply اصلاحات noshare
+        id: apply-customizations
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          UPSTREAM_TAG="\${{ steps.check.outputs.upstream_tag }}"
+          MASTER_PATCH="$RUNNER_TEMP/master-customizations.patch"
+          NOSHARE_PATCH="$RUNNER_TEMP/noshare-customizations.patch"
+
+          # Build the named "اصلاحات master" set from the last synchronized
+          # upstream release to the current master branch. Keep build.yml and
+          # all successful app customizations; exclude only sync bookkeeping.
+          git diff --binary "$CURRENT_UPSTREAM" origin/master -- . \
+            ':!.github/upstream-version' \
+            ':!.github/workflows/weekly-upstream-sync.yml' \
+            ':!.github/workflows/upstream-release-sync.yml' > "$MASTER_PATCH"
+
+          # Build the named "اصلاحات noshare" set from the net differences
+          # between the two current branches. This captures only NoShare-specific
+          # end-state changes, not reverted experiments or inherited master work.
+          git diff --binary origin/master origin/noshare -- . \
+            ':!.github/upstream-version' \
+            ':!.github/workflows/weekly-upstream-sync.yml' \
+            ':!.github/workflows/upstream-release-sync.yml' > "$NOSHARE_PATCH"
+
+          if [ ! -s "$MASTER_PATCH" ]; then
+            echo "The اصلاحات master patch is empty; refusing to overwrite master."
+            exit 1
+          fi
+          if [ ! -s "$NOSHARE_PATCH" ]; then
+            echo "The اصلاحات noshare patch is empty; refusing to overwrite noshare."
+            exit 1
+          fi
+
+          echo "اصلاحات master:"
+          git diff --stat "$CURRENT_UPSTREAM" origin/master -- . \
+            ':!.github/upstream-version' \
+            ':!.github/workflows/weekly-upstream-sync.yml' \
+            ':!.github/workflows/upstream-release-sync.yml'
+          echo "اصلاحات noshare:"
+          git diff --stat origin/master origin/noshare -- . \
+            ':!.github/upstream-version' \
+            ':!.github/workflows/weekly-upstream-sync.yml' \
+            ':!.github/workflows/upstream-release-sync.yml'
+
+          # Start from the new official source release and reapply اصلاحات master.
+          git checkout -B master "refs/tags/$UPSTREAM_TAG"
+          if ! git apply --3way --index "$MASTER_PATCH"; then
+            echo "اصلاحات master could not be cleanly reapplied to the new upstream source."
+            git status --short
+            exit 1
+          fi
+
+          # Restore this new workflow (it is maintained by the fork, not upstream).
+          mkdir -p .github/workflows
+          cp "$RUNNER_TEMP/upstream-release-sync.yml" .github/workflows/upstream-release-sync.yml
+
+          # Re-fetch the fork's customized Xray submodule after applying its
+          # gitlink and URL changes, so the Allow Insecure implementation is kept.
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+          # Increment only the final three-digit release suffix; never delete old releases.
+          PREVIOUS_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+            --json tagName,createdAt \
+            | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
+          if [ -n "$PREVIOUS_RELEASE" ]; then
+            LAST_SUFFIX="\${PREVIOUS_RELEASE##*.}"
+          else
+            CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "v\?\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+            LAST_SUFFIX="\${CURRENT_VERSION##*.}"
+          fi
+          if ! [[ "$LAST_SUFFIX" =~ ^[0-9]+$ ]]; then
+            echo "Could not determine the previous three-digit release suffix."
+            exit 1
+          fi
+          NEXT_SUFFIX=$(printf '%03d' "$((10#$LAST_SUFFIX + 1))")
+          VERSION_BASE="\${UPSTREAM_TAG#v}"
+          NEW_VERSION="v.\${VERSION_BASE}.\${NEXT_SUFFIX}"
+
+          CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+          if ! [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]; then
+            echo "Could not read versionCode after applying اصلاحات master."
+            exit 1
+          fi
+          NEW_CODE=$((CURRENT_CODE + 1))
+          export NEW_VERSION NEW_CODE UPSTREAM_TAG
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          p = Path("V2rayNG/app/build.gradle.kts")
+          s = p.read_text()
+          s, code_count = re.subn(
+              r'(?m)^(\s*versionCode\s*=\s*)\d+',
+              lambda m: m.group(1) + os.environ["NEW_CODE"], s, count=1
+          )
+          s, name_count = re.subn(
+              r'(?m)^(\s*versionName\s*=\s*)"[^"]+"',
+              lambda m: m.group(1) + '"' + os.environ["NEW_VERSION"] + '"', s, count=1
+          )
+          if code_count != 1 or name_count != 1:
+              raise SystemExit("Expected exactly one versionCode and versionName declaration.")
+          p.write_text(s)
+          Path(".github/upstream-version").write_text(os.environ["UPSTREAM_TAG"] + "\n")
+          PY
+
+          git add -A
+          git diff --cached --check
+          git commit -m "Apply اصلاحات master to upstream $UPSTREAM_TAG; prepare $NEW_VERSION"
+          MASTER_SHA=$(git rev-parse HEAD)
+
+          # Copy every updated master file to NoShare first, then reapply only
+          # the saved "اصلاحات noshare" end-state patch on top of it.
+          git checkout -B noshare "$MASTER_SHA"
+          if ! git apply --3way --index "$NOSHARE_PATCH"; then
+            echo "اصلاحات noshare could not be cleanly reapplied to the updated master files."
+            git status --short
+            exit 1
+          fi
+
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+          # Verify the master customization set survived.
+          grep -q 'applicationId = "com.v2ray.ang.shz"' V2rayNG/app/build.gradle.kts
+          grep -q 'https://github.com/shiraztest2000-lang/AndroidLibXrayLite' .gitmodules
+          grep -q 'SHZv2rayNG' V2rayNG/app/src/main/res/values/strings.xml
+          test -s .github/workflows/build.yml
+
+          # Verify the full NoShare customization set survived.
+          grep -q 'create("noshare")' V2rayNG/app/build.gradle.kts
+          grep -q 'applicationIdSuffix = ".noshare"' V2rayNG/app/build.gradle.kts
+          SERVER_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainServerPager.kt"
+          SUB_SETTINGS_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/subscription/SubSettingActivity.kt"
+          INFO_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainSubscriptionInfo.kt"
+          grep -q 'Text(row.remarks' "$SERVER_FILE"
+          if grep -Eq 'actions\.(edit|share|more|remove)\(' "$SERVER_FILE"; then
+            echo "Per-node action buttons returned in اصلاحات noshare."
+            exit 1
+          fi
+          grep -q 'ic_delete_24dp' "$SUB_SETTINGS_FILE"
+          if grep -Eq 'onEdit|onShare|onEnable|subscriptionUrl|subscription URL' "$SUB_SETTINGS_FILE"; then
+            echo "A removed subscription control returned in اصلاحات noshare."
+            exit 1
+          fi
+          grep -q 'iconRes = R.drawable.ic_refresh_24dp' "$INFO_FILE"
+          if grep -Eq 'onOpenLink[[:space:]]*\(' "$INFO_FILE"; then
+            echo "The external subscription-link button returned in اصلاحات noshare."
+            exit 1
+          fi
+          if [ "$(grep -c 'iconRes =' "$INFO_FILE")" -ne 1 ]; then
+            echo "The subscription card must contain Refresh as its only icon."
+            exit 1
+          fi
+          test -s .github/workflows/build-noshare.yml
+          git diff --cached --check
+          git add -A
+          git diff --cached --check
+          git commit -m "Apply اصلاحات noshare on top of $NEW_VERSION"
+          NOSHARE_SHA=$(git rev-parse HEAD)
+
+          # Push both branches atomically: neither branch is updated if one push fails.
+          git push --atomic origin "$MASTER_SHA:refs/heads/master" "$NOSHARE_SHA:refs/heads/noshare"
+
+          echo "release_tag=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "master_sha=$MASTER_SHA" >> "$GITHUB_OUTPUT"
+          echo "noshare_sha=$NOSHARE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Build master APKs and create the new release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: \${{ steps.apply-customizations.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
+
+      - name: Build NoShare APK and add it to the same release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
+
+      - name: No new upstream release
+        if: steps.check.outputs.changed != 'true'
+        run: echo "No new upstream release. No changes or releases were made."
