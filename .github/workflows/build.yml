@@ -1,12 +1,16 @@
 name: Build APK
 
+concurrency:
+  group: shz-release-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'GitHub release tag to publish (for example v.04)'
+        description: 'GitHub release tag to publish (for example v.2.4.1.001)'
         required: false
-        default: 'v.04'
+        default: 'v.2.4.1.001'
         type: string
   pull_request:
     branches:
@@ -174,28 +178,54 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const tag = context.payload.inputs?.release_tag || 'v.04';
-            try {
-              await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-              await github.rest.git.createRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `refs/tags/${tag}`, sha: context.sha });
-            }
-            try {
-              await github.rest.repos.getReleaseByTag({ owner: context.repo.owner, repo: context.repo.repo, tag });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-              await github.rest.repos.createRelease({
+            const tag = context.payload.inputs?.release_tag || 'v.2.4.1.001';
+            // Remove every previous GitHub Release and its APK assets.
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+            for (const release of releases) {
+              await github.rest.repos.deleteRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                tag_name: tag,
-                target_commitish: context.sha,
-                name: `v2rayNGshz ${tag}`,
-                body: 'Experimental build with restored TLS Allow Insecure support. The option remains disabled by default.',
-                draft: false,
-                prerelease: false
+                release_id: release.id
               });
             }
+
+            // Remove all old version tags, including a previous tag with this exact name.
+            const tagRefs = await github.paginate(github.rest.git.listMatchingRefs, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'tags/',
+              per_page: 100
+            });
+            for (const tagRef of tagRefs) {
+              const shortName = tagRef.ref.replace('refs/tags/', '');
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${shortName}`
+              });
+            }
+
+            // Publish only the requested version tag and release.
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/${tag}`,
+              sha: context.sha
+            });
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: `SHZv2rayNG ${tag}`,
+              body: 'SHZv2rayNG release. Allow Insecure remains disabled by default.',
+              draft: false,
+              prerelease: false
+            });
 
       - name: Upload APKs to GitHub Release
         uses: svenstaro/upload-release-action@v2
@@ -203,11 +233,11 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: release/**/*.apk
           file_glob: true
-          tag: ${{ inputs.release_tag || 'v.04' }}
+          tag: ${{ inputs.release_tag || 'v.2.4.1.001' }}
           overwrite: true
           prerelease: false
-          release_name: v2rayNGshz ${{ inputs.release_tag || 'v.04' }}
+          release_name: SHZv2rayNG ${{ inputs.release_tag || 'v.2.4.1.001' }}
           body: |
-            Experimental build with restored TLS Allow Insecure support.
-            These APKs are signed with the CI test key unless a signing keystore is configured.
-            They cannot update the official v2rayNG app signed with a different key.
+            SHZv2rayNG ${{ inputs.release_tag || 'v.2.4.1.001' }}.
+            Allow Insecure remains disabled by default.
+            These APKs are signed with the configured keystore when available; otherwise they use a CI test key.
