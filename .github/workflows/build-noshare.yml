@@ -1,0 +1,140 @@
+name: Build NoShare arm64-v8a APK
+
+on:
+  push:
+    branches:
+      - noshare
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-noshare:
+    runs-on: ubuntu-latest
+    env:
+      APP_KEYSTORE_BASE64: ${{ secrets.APP_KEYSTORE_BASE64 }}
+      APP_KEYSTORE_PASSWORD: ${{ secrets.APP_KEYSTORE_PASSWORD }}
+      APP_KEYSTORE_ALIAS: ${{ secrets.APP_KEYSTORE_ALIAS }}
+      APP_KEY_PASSWORD: ${{ secrets.APP_KEY_PASSWORD }}
+      RELEASE_TAG: v.2.4.1.001
+
+    steps:
+      - name: Checkout noshare branch
+        uses: actions/checkout@v7
+        with:
+          ref: noshare
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '14742923'
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;30.0.16248370"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
+          sed -i '10i\\
+          \\
+              ndkVersion = "30.0.16248370"' "$GITHUB_WORKSPACE/V2rayNG/app/build.gradle.kts"
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save cached libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: libs
+          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r libs "$GITHUB_WORKSPACE/V2rayNG/app"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: AndroidLibXrayLite/go.mod
+
+      - name: Build libv2ray
+        run: |
+          cd AndroidLibXrayLite
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          mkdir -p assets data
+          bash gen_assets.sh download
+          cp -v data/*.dat assets/
+          gomobile init
+          go mod tidy
+          gomobile bind -v -androidapi 24 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' ./
+          mkdir -p ../V2rayNG/app/libs
+          cp -v libv2ray.aar ../V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Decode signing keystore
+        if: ${{ env.APP_KEYSTORE_BASE64 != '' && env.APP_KEYSTORE_PASSWORD != '' && env.APP_KEYSTORE_ALIAS != '' && env.APP_KEY_PASSWORD != '' }}
+        uses: timheuer/base64-to-file@v2.0.0
+        id: android_keystore
+        with:
+          fileName: android_keystore.jks
+          encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
+
+      - name: Build NoShare arm64-v8a APK
+        env:
+          KEYSTORE_FILE: ${{ steps.android_keystore.outputs.filePath }}
+        run: |
+          cd "$GITHUB_WORKSPACE/V2rayNG"
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          if [ -n "$APP_KEYSTORE_BASE64" ] && [ -n "$APP_KEYSTORE_PASSWORD" ] && [ -n "$APP_KEYSTORE_ALIAS" ] && [ -n "$APP_KEY_PASSWORD" ]; then
+            ./gradlew assembleNoshareRelease -PABI_FILTERS=arm64-v8a -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" -Pandroid.injected.signing.store.password="$APP_KEYSTORE_PASSWORD" -Pandroid.injected.signing.key.alias="$APP_KEYSTORE_ALIAS" -Pandroid.injected.signing.key.password="$APP_KEY_PASSWORD"
+          else
+            keytool -genkeypair -v -keystore "$RUNNER_TEMP/noshare-ci.keystore" -storepass android -keypass android -alias noshare-ci -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=SHZv2rayNG NoShare,O=ShirazTipsy,C=DE"
+            ./gradlew assembleNoshareRelease -PABI_FILTERS=arm64-v8a -Pandroid.injected.signing.store.file="$RUNNER_TEMP/noshare-ci.keystore" -Pandroid.injected.signing.store.password=android -Pandroid.injected.signing.key.alias=noshare-ci -Pandroid.injected.signing.key.password=android
+          fi
+          APK="app/build/outputs/apk/noshare/release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"
+          test -s "$APK"
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          cp "$APK" "$GITHUB_WORKSPACE/release/"
+
+      - name: Verify APK package and ABI
+        run: |
+          APK="$GITHUB_WORKSPACE/release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.v2ray.ang.shz.noshare'"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -F "native-code: 'arm64-v8a'"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SHZv2rayNG1-arm64-v8a
+          path: release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk
+          if-no-files-found: error
+
+      - name: Append APK to existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"; then
+            echo "The NoShare APK asset already exists; refusing to overwrite it."
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk --repo "$GITHUB_REPOSITORY"
