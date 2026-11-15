@@ -83,7 +83,7 @@ jobs:
           if ! git merge --no-commit --no-ff "refs/tags/$UPSTREAM_TAG"; then
             CONFLICT_FILES=$(git diff --name-only --diff-filter=U | sort -u)
             echo "Merge conflicts detected:"
-            printf '%s\\n' "$CONFLICT_FILES"
+            printf '%s\n' "$CONFLICT_FILES"
 
             if [ -z "$CONFLICT_FILES" ]; then
               git merge --abort || true
@@ -97,13 +97,13 @@ jobs:
                   echo "Keeping the fork's patched Xray core submodule so Allow Insecure remains available."
                   ;;
                 V2rayNG/app/build.gradle.kts)
-                  UNEXPECTED=$(git diff --unified=0 "refs/tags/$CURRENT_UPSTREAM" "refs/tags/$UPSTREAM_TAG" -- "$CONFLICT_FILE" \\
-                    | grep -E '^[+-]' \\
-                    | grep -vE '^(---|\\+\\+\\+|[+-][[:space:]]*(versionCode|versionName)[[:space:]]*=)' || true)
+                  UNEXPECTED=$(git diff --unified=0 "refs/tags/$CURRENT_UPSTREAM" "refs/tags/$UPSTREAM_TAG" -- "$CONFLICT_FILE" \
+                    | grep -E '^[+-]' \
+                    | grep -vE '^(---|\+\+\+|[+-][[:space:]]*(versionCode|versionName)[[:space:]]*=)' || true)
                   if [ -n "$UNEXPECTED" ]; then
                     git merge --abort || true
                     echo "Upstream changed additional Gradle settings; refusing to discard them."
-                    printf '%s\\n' "$UNEXPECTED"
+                    printf '%s\n' "$UNEXPECTED"
                     exit 1
                   fi
                   echo "Keeping local version fields; the workflow will advance them after the merge."
