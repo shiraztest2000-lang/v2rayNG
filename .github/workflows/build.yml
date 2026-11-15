@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
+        description: 'GitHub release tag to publish (for example v.03)'
         required: false
+        default: 'v.03'
         type: string
   pull_request:
     branches:
@@ -175,7 +177,7 @@ jobs:
           file_glob: true
           tag: ${{ inputs.release_tag || 'v.03' }}
           overwrite: true
-          prerelease: true
+          prerelease: false
           release_name: v2rayNG ${{ inputs.release_tag || 'v.03' }}
           body: |
             Experimental build with restored TLS Allow Insecure support.
