@@ -43,7 +43,7 @@ jobs:
     - name: Read release version
       id: app-version
       run: |
-        VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+        VERSION_NAME=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
         test -n "$VERSION_NAME"
         echo "release_tag=$VERSION_NAME" >> "$GITHUB_OUTPUT"
 
