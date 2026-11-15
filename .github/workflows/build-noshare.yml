@@ -111,22 +111,22 @@ jobs:
             keytool -genkeypair -v -keystore "$RUNNER_TEMP/noshare-ci.keystore" -storepass android -keypass android -alias noshare-ci -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=SHZv2rayNG NoShare,O=ShirazTipsy,C=DE"
             ./gradlew assembleNoshareRelease -PABI_FILTERS=arm64-v8a -Pandroid.injected.signing.store.file="$RUNNER_TEMP/noshare-ci.keystore" -Pandroid.injected.signing.store.password=android -Pandroid.injected.signing.key.alias=noshare-ci -Pandroid.injected.signing.key.password=android
           fi
-          APK="app/build/outputs/apk/noshare/release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"
+          APK="app/build/outputs/apk/noshare/release/SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk"
           test -s "$APK"
           mkdir -p "$GITHUB_WORKSPACE/release"
           cp "$APK" "$GITHUB_WORKSPACE/release/"
 
       - name: Verify APK package and ABI
         run: |
-          APK="$GITHUB_WORKSPACE/release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"
+          APK="$GITHUB_WORKSPACE/release/SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk"
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.v2ray.ang.shz.noshare'"
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -F "native-code: 'arm64-v8a'"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: SHZv2rayNG1-arm64-v8a
-          path: release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk
+          name: SHZv2rayNG-noshare-arm64-v8a
+          path: release/SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk
           if-no-files-found: error
 
       - name: Append APK to existing release
@@ -134,8 +134,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          # Remove the previous NoShare-named asset only after the new APK has built and passed verification.
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk"; then
-            echo "The NoShare APK asset already exists; refusing to overwrite it."
-            exit 1
+            gh release delete-asset "$RELEASE_TAG" "SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk" --yes --repo "$GITHUB_REPOSITORY"
           fi
-          gh release upload "$RELEASE_TAG" release/SHZv2rayNG1_v.2.4.1.001_arm64-v8a.apk --repo "$GITHUB_REPOSITORY"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk"; then
+            gh release delete-asset "$RELEASE_TAG" "SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk" --yes --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release upload "$RELEASE_TAG" release/SHZv2rayNG_noshare_v.2.4.1.001_arm64-v8a.apk --repo "$GITHUB_REPOSITORY"
