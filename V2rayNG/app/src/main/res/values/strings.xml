@@ -298,7 +298,7 @@
     <string name="toast_tg_app_not_found">Telegram app not found</string>
     <string name="title_privacy_policy">Privacy policy</string>
     <string name="title_qr_code">QR code</string>
-    <string name="title_about">ShirazTipsy</string>
+    <string name="title_about">About</string>
     <string name="title_source_code">Source code</string>
     <string name="title_oss_license">Open-source licenses</string>
     <string name="title_translators">Translators</string>
@@ -577,4 +577,5 @@
     <string name="sub_info_unlimited">Unlimited</string>
 
     <string name="main_edited_by" translatable="false">edited by ShirazTipsy</string>
+    <string name="menu_item_shiraz_tipsy" translatable="false">ShirazTipsy</string>
 </resources>
