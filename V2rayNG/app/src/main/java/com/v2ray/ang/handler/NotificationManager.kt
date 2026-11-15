@@ -93,7 +93,7 @@ object NotificationManager {
 
         mBuilder = NotificationCompat.Builder(service, channelId)
             .setSmallIcon(R.drawable.ic_stat_name)
-            .setContentTitle("${currentConfig?.remarks ?: service.getString(R.string.app_name)} SHZv2rayNG ShirazTipsy Edition")
+            .setContentTitle(currentConfig?.remarks ?: service.getString(R.string.app_name))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setShowWhen(false)
