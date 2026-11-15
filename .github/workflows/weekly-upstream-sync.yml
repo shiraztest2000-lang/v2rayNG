@@ -171,30 +171,64 @@ jobs:
           echo "release_tag=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Applied اصلاحات master on top of upstream $UPSTREAM_TAG."
 
-      - name: Apply اصلاحات master, then preserve اصلاحات noshare
+      - name: Reapply the complete NoShare customization set on updated upstream files
         if: steps.check.outputs.changed == 'true'
         run: |
+          set -euo pipefail
+
           MASTER_SHA=$(git rev-parse master)
-          git checkout -B noshare origin/noshare
 
-          # Merge the updated master first. The NoShare-only commits remain on this branch.
-          git merge --no-edit --no-ff "$MASTER_SHA" \
-            -m "Apply اصلاحات master and preserve اصلاحات noshare"
+          # Capture every NoShare-only file change against the pre-sync master.
+          # The weekly workflow itself is intentionally excluded: the new sync
+          # implementation from master must be used on both branches.
+          PATCH_FILE="$RUNNER_TEMP/noshare-customizations.patch"
+          git diff --binary origin/master origin/noshare -- . ':!.github/workflows/weekly-upstream-sync.yml' > "$PATCH_FILE"
+          if [ ! -s "$PATCH_FILE" ]; then
+            echo "NoShare customization patch is unexpectedly empty; refusing to publish."
+            exit 1
+          fi
 
-          # Confirm the NoShare product flavor and its isolated package still exist.
+          echo "Captured the complete NoShare-only patch:"
+          git diff --stat origin/master origin/noshare -- . ':!.github/workflows/weekly-upstream-sync.yml'
+
+          # Start NoShare from the newly synchronized master, then reapply all
+          # branch-specific changes as a three-way patch onto the new source.
+          git checkout -B noshare "$MASTER_SHA"
+          if ! git apply --3way --index "$PATCH_FILE"; then
+            echo "At least one NoShare customization conflicts with the updated upstream source."
+            echo "NoShare will not be pushed or built until the conflict is resolved."
+            git status --short
+            exit 1
+          fi
+
+          # Verify the entire NoShare customization set, not only the header icon.
           grep -q 'create("noshare")' V2rayNG/app/build.gradle.kts
           grep -q 'applicationIdSuffix = ".noshare"' V2rayNG/app/build.gradle.kts
-          grep -q 'Simplify subscription list to name and delete only' <(git log --format='%s' -n 100)
 
-          # NoShare customizations that must survive every 7-day upstream sync:
-          # - Keep node rows limited to the node name.
-          # - In subscription settings, keep Delete only (no URL, Edit, Share, or enable toggle).
-          # - In the subscription information card, keep Refresh but do not restore the external
-          #   subscription/panel-link shortcut next to the subscription title.
+          SERVER_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainServerPager.kt"
+          SUB_SETTINGS_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/subscription/SubSettingActivity.kt"
           INFO_FILE="V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainSubscriptionInfo.kt"
+
+          # Server rows must show the node name only, without per-node action controls.
+          grep -q 'Text(row.remarks' "$SERVER_FILE"
+          if grep -Eq 'actions\.(edit|share|more|remove)\(' "$SERVER_FILE"; then
+            echo "Per-node edit/share/more/delete actions were restored in NoShare."
+            exit 1
+          fi
+
+          # Subscription settings retain deletion, while URL/edit/share/activation
+          # controls remain absent from each subscription entry.
+          grep -q 'ic_delete_24dp' "$SUB_SETTINGS_FILE"
+          if grep -Eq 'onEdit|onShare|onEnable|subscriptionUrl|subscription URL' "$SUB_SETTINGS_FILE"; then
+            echo "A removed subscription-entry control was restored in NoShare."
+            exit 1
+          fi
+
+          # The subscription information card keeps Refresh and usage/expiry data,
+          # without an external subscription-link shortcut.
           grep -q 'iconRes = R.drawable.ic_refresh_24dp' "$INFO_FILE"
           if grep -Eq 'onOpenLink[[:space:]]*\(' "$INFO_FILE"; then
-            echo "External subscription-link callback was restored in the NoShare information card."
+            echo "External subscription-link callback was restored in NoShare."
             exit 1
           fi
           if [ "$(grep -c 'iconRes =' "$INFO_FILE")" -ne 1 ]; then
@@ -202,9 +236,10 @@ jobs:
             exit 1
           fi
 
+          git commit -m "Reapply complete NoShare customizations after upstream sync"
           git push origin master:master
           git push origin noshare:noshare
-          echo "Updated master and noshare."
+          echo "Updated master and reapplied the complete NoShare customization set."
 
       - name: Start both branch builds and publish the new release
         if: steps.check.outputs.changed == 'true'
