@@ -1,0 +1,69 @@
+name: Publish v.03 Release
+
+on:
+  push:
+    branches:
+      - 'publish/**'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download validated APK artifacts
+        uses: actions/download-artifact@v8
+        with:
+          run-id: 43718977578
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release
+
+      - name: Verify APK artifacts
+        run: |
+          find release -type f -name '*.apk' -print
+          test "$(find release -type f -name '*.apk' | wc -l)" -ge 2
+
+      - name: Create v.03 tag and release entry
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = 'v.03';
+            try {
+              await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.git.createRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `refs/tags/${tag}`, sha: '7b1ccfa61ec11bd0b183b6e75194e4b2387f5e32' });
+            }
+            try {
+              await github.rest.repos.getReleaseByTag({ owner: context.repo.owner, repo: context.repo.repo, tag });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                target_commitish: 'master',
+                name: `v2rayNG ${tag}`,
+                body: 'Build with restored TLS Allow Insecure support. The option remains disabled by default. CI-signed APKs are intended for fresh installation and may not update the official app.',
+                draft: false,
+                prerelease: false
+              });
+            }
+
+      - name: Upload APKs to v.03 release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: release/**/*.apk
+          file_glob: true
+          tag: v.03
+          overwrite: true
+          prerelease: false
+          release_name: v2rayNG v.03
+          body: |
+            Build with restored TLS Allow Insecure support.
+            The option remains disabled by default.
+            CI-signed APKs may not update the official app signed with another key.
