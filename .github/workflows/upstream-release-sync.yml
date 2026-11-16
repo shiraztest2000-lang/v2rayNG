@@ -10,7 +10,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: upstream-release-sync
+  group: shz-dual-release-pipeline
   cancel-in-progress: false
 
 jobs:
