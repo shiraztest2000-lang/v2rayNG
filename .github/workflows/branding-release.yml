@@ -47,9 +47,7 @@ jobs:
           # Use the highest numeric suffix across all SHZ releases. Never depend on timestamps:
           # GitHub can return multiple releases with identical created_at values.
           RELEASE_STATE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
-            | jq -r '[.[].tagName | capture("^v\\.(?<base>[0-9]+(\\.[0-9]+)*)\\.(?<suffix>[0-9]{3})$")? \
-              | {tag: ("v." + .base + "." + .suffix), suffix: (.suffix | tonumber)}] \
-              | if length == 0 then "" else max_by(.suffix) | [.tag, (.suffix | tostring)] | @tsv end')
+            | jq -r '[.[].tagName | capture("^v\\.(?<base>[0-9]+(\\.[0-9]+)*)\\.(?<suffix>[0-9]{3})$")? | {tag: ("v." + .base + "." + .suffix), suffix: (.suffix | tonumber)}] | if length == 0 then "" else max_by(.suffix) | [.tag, (.suffix | tostring)] | @tsv end')
           NEXT_SUFFIX=$CURRENT_SUFFIX
           if [ -n "$RELEASE_STATE" ]; then
             IFS=$'\t' read -r LATEST_RELEASE LATEST_SUFFIX <<< "$RELEASE_STATE"
