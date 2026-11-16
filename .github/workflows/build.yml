@@ -12,12 +12,6 @@ on:
         required: false
         default: ''
         type: string
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - master
 
 permissions:
   contents: write
@@ -230,7 +224,7 @@ jobs:
                 tag_name: tag,
                 target_commitish: context.sha,
                 name: `SHZv2rayNG ${tag}`,
-                body: 'SHZv2rayNG release. Allow Insecure remains disabled by default.',
+                body: 'SHZv2rayNG release. Allow Insecure is enabled by default unless a profile explicitly disables it or certificate pinning is configured.',
                 draft: false,
                 prerelease: false
               });
@@ -249,5 +243,5 @@ jobs:
           release_name: SHZv2rayNG ${{ steps.release-info.outputs.tag }}
           body: |
             SHZv2rayNG ${{ steps.release-info.outputs.tag }}.
-            Allow Insecure remains disabled by default.
+            Allow Insecure is enabled by default unless a profile explicitly disables it or certificate pinning is configured.
             These APKs are signed with the configured keystore when available; otherwise they use a CI test key.
