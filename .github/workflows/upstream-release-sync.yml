@@ -53,10 +53,26 @@ jobs:
           echo "Latest upstream release: $LATEST"
 
           if [ "$LATEST" = "$CURRENT" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No new upstream release. No files, branches, tags, or releases will be changed."
+            # Recover if branches were updated previously but the APK release was incomplete.
+            CURRENT_APP_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+            if [ -z "$CURRENT_APP_VERSION" ]; then
+              echo "Could not read the current SHZv2rayNG version for retry validation."
+              exit 1
+            fi
+            ASSET_COUNT=$(gh release view "$CURRENT_APP_VERSION" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length' 2>/dev/null || echo 0)
+            if [[ "$ASSET_COUNT" =~ ^[0-9]+$ ]] && [ "$ASSET_COUNT" -ge 5 ]; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "The synchronized release already contains all five APK assets."
+              exit 0
+            fi
+            echo "The upstream release is unchanged, but the SHZv2rayNG release is missing or incomplete (asset count: $ASSET_COUNT). Retrying the same version."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "retry=true" >> "$GITHUB_OUTPUT"
+            echo "retry_version=$CURRENT_APP_VERSION" >> "$GITHUB_OUTPUT"
+            echo "upstream_tag=$LATEST" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "retry=false" >> "$GITHUB_OUTPUT"
 
           NEWEST=$(printf '%s\n%s\n' "$CURRENT" "$LATEST" | sort -V | tail -n 1)
           if [ "$NEWEST" != "$LATEST" ]; then
@@ -136,30 +152,40 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive
 
-          # Increment only the final three-digit release suffix; never delete old releases.
-          PREVIOUS_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
-            --json tagName,createdAt \
-            | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
-          if [ -n "$PREVIOUS_RELEASE" ]; then
-            LAST_SUFFIX="${PREVIOUS_RELEASE##*.}"
+          if [ "${{ steps.check.outputs.retry }}" = "true" ]; then
+            # Reuse the already assigned version and versionCode for an incomplete release retry.
+            NEW_VERSION="${{ steps.check.outputs.retry_version }}"
+            NEW_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+            if ! [[ "$NEW_CODE" =~ ^[0-9]+$ ]]; then
+              echo "Could not read versionCode for the pending release retry."
+              exit 1
+            fi
           else
-            CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "v\?\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
-            LAST_SUFFIX="${CURRENT_VERSION##*.}"
-          fi
-          if ! [[ "$LAST_SUFFIX" =~ ^[0-9]+$ ]]; then
-            echo "Could not determine the previous three-digit release suffix."
-            exit 1
-          fi
-          NEXT_SUFFIX=$(printf '%03d' "$((10#$LAST_SUFFIX + 1))")
-          VERSION_BASE="${UPSTREAM_TAG#v}"
-          NEW_VERSION="v.${VERSION_BASE}.${NEXT_SUFFIX}"
+            # Increment only the final three-digit release suffix; never delete old releases.
+            PREVIOUS_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+              --json tagName,createdAt \
+              | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
+            if [ -n "$PREVIOUS_RELEASE" ]; then
+              LAST_SUFFIX="${PREVIOUS_RELEASE##*.}"
+            else
+              CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "v\?\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+              LAST_SUFFIX="${CURRENT_VERSION##*.}"
+            fi
+            if ! [[ "$LAST_SUFFIX" =~ ^[0-9]+$ ]]; then
+              echo "Could not determine the previous three-digit release suffix."
+              exit 1
+            fi
+            NEXT_SUFFIX=$(printf '%03d' "$((10#$LAST_SUFFIX + 1))")
+            VERSION_BASE="${UPSTREAM_TAG#v}"
+            NEW_VERSION="v.${VERSION_BASE}.${NEXT_SUFFIX}"
 
-          CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
-          if ! [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]; then
-            echo "Could not read versionCode after applying اصلاحات شاخه master."
-            exit 1
+            CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+            if ! [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]; then
+              echo "Could not read versionCode after applying اصلاحات شاخه master."
+              exit 1
+            fi
+            NEW_CODE=$((CURRENT_CODE + 1))
           fi
-          NEW_CODE=$((CURRENT_CODE + 1))
           export NEW_VERSION NEW_CODE UPSTREAM_TAG
           python3 - <<'PY'
           import os, re
