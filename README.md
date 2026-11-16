@@ -4,6 +4,8 @@
 
 ![SHZv2rayNG logo](https://raw.githubusercontent.com/shiraztest2000-lang/v2rayNG/master/branding/SHZv2rayNG-logo.png)
 
+*Official fork branding used for the Android launcher, store listing, and project documentation.*
+
 **A customized Android V2Ray client maintained by ShirazTipsy**
 
 [English](#english) · [فارسی](#فارسی) · [Latest Release](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
@@ -33,7 +35,7 @@ This fork keeps its own application identity, release workflow, and project docu
 
 ### Download
 
-**Current version: `v.2.4.1.001`**
+**Current version: `v.2.4.1.002`**
 
 - [Download the latest SHZv2rayNG release](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
 - [Browse all releases and APK variants](https://github.com/shiraztest2000-lang/v2rayNG/releases)
@@ -96,7 +98,7 @@ SHZv2rayNG is an **unofficial fork**. It is not the official v2rayNG project and
 
 ### دانلود
 
-**نسخه فعلی: `v.2.4.1.001`**
+**نسخه فعلی: `v.2.4.1.002`**
 
 - [دانلود آخرین نسخه SHZv2rayNG](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
 - [مشاهده تمام نسخه‌ها و فایل‌های APK](https://github.com/shiraztest2000-lang/v2rayNG/releases)

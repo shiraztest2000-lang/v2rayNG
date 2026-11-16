@@ -25,3 +25,7 @@ For a quick start, read guide for <a href="https://github.com/golang/go/wiki/Mob
 
 <p>v2rayNG can run on Android Emulators. For WSA, VPN permission need to be granted via
 <code>appops set [package name] ACTIVATE_VPN allow</code></p>
+
+
+<h3>SHZv2rayNG by ShirazTipsy</h3>
+<p>This independently maintained Android fork is branded as SHZv2rayNG. Its app icon and store artwork use the current project logo. Project source, documentation, and releases are maintained at <a href="https://github.com/shiraztest2000-lang/v2rayNG">the SHZv2rayNG GitHub repository</a>.</p>

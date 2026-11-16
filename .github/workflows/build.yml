@@ -40,6 +40,18 @@ jobs:
         submodules: 'recursive'
         fetch-depth: '0'
 
+    - name: Apply current SHZv2rayNG branding to app and store icons
+      run: |
+        python3 -m pip install --user Pillow
+        python3 scripts/update_branding_assets.py
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add V2rayNG/app/src/main/ic_launcher-web.png V2rayNG/app/src/main/res/mipmap-* fastlane/metadata/android/en-US/images/icon.png
+        if ! git diff --cached --quiet; then
+          git commit -m "chore: sync SHZv2rayNG branding assets"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+        fi
+
     - name: Read release version
       id: app-version
       run: |
@@ -169,7 +181,7 @@ jobs:
   sign-and-release:
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release:')) }}
 
     steps:
       - name: Download APK artifacts
