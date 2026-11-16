@@ -60,9 +60,9 @@ jobs:
               exit 1
             fi
             ASSET_COUNT=$(gh release view "$CURRENT_APP_VERSION" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length' 2>/dev/null || echo 0)
-            if [[ "$ASSET_COUNT" =~ ^[0-9]+$ ]] && [ "$ASSET_COUNT" -ge 5 ]; then
+            if [[ "$ASSET_COUNT" =~ ^[0-9]+$ ]] && [ "$ASSET_COUNT" -ge 11 ]; then
               echo "changed=false" >> "$GITHUB_OUTPUT"
-              echo "The synchronized release already contains all five APK assets."
+              echo "The synchronized release already contains all expected APK assets (10 master variants and one NoShare Universal)."
               exit 0
             fi
             echo "The upstream release is unchanged, but the SHZv2rayNG release is missing or incomplete (asset count: $ASSET_COUNT). Retrying the same version."
