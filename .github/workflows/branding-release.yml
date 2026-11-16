@@ -8,7 +8,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: shz-branding-dual-release
+  group: shz-dual-release-pipeline
   cancel-in-progress: false
 
 jobs:
