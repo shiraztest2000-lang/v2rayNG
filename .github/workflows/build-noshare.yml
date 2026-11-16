@@ -1,9 +1,6 @@
 name: Build NoShare Universal APK
 
 on:
-  push:
-    branches:
-      - noshare
   workflow_dispatch:
 
 concurrency:
