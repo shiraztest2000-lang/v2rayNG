@@ -44,14 +44,26 @@ jobs:
           CURRENT_SUFFIX=$((10#${BASH_REMATCH[3]}))
           [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]
 
-          LATEST_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
-            | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
+          # Use the highest numeric suffix across all SHZ releases. Never depend on timestamps:
+          # GitHub can return multiple releases with identical created_at values.
+          RELEASE_STATE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+            | jq -r '[.[].tagName | capture("^v\\.(?<base>[0-9]+(\\.[0-9]+)*)\\.(?<suffix>[0-9]{3})$")? \
+              | {tag: ("v." + .base + "." + .suffix), suffix: (.suffix | tonumber)}] \
+              | if length == 0 then "" else max_by(.suffix) | [.tag, (.suffix | tostring)] | @tsv end')
           NEXT_SUFFIX=$CURRENT_SUFFIX
-          if [ -n "$LATEST_RELEASE" ] && [[ "$LATEST_RELEASE" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]; then
-            RELEASE_BASE="${BASH_REMATCH[1]}"
-            RELEASE_SUFFIX=$((10#${BASH_REMATCH[3]}))
-            if [ "$RELEASE_BASE" = "$VERSION_BASE" ] && [ "$NEXT_SUFFIX" -le "$RELEASE_SUFFIX" ]; then
-              NEXT_SUFFIX=$((RELEASE_SUFFIX + 1))
+          if [ -n "$RELEASE_STATE" ]; then
+            IFS=$'\t' read -r LATEST_RELEASE LATEST_SUFFIX <<< "$RELEASE_STATE"
+            ASSET_COUNT=$(gh release view "$LATEST_RELEASE" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length' 2>/dev/null || echo 0)
+            [[ "$ASSET_COUNT" =~ ^[0-9]+$ ]] || ASSET_COUNT=0
+            if [ "$CURRENT_SUFFIX" -gt "$LATEST_SUFFIX" ]; then
+              NEXT_SUFFIX=$CURRENT_SUFFIX
+            elif [ "$CURRENT_VERSION" = "$LATEST_RELEASE" ] && [ "$ASSET_COUNT" -lt 11 ]; then
+              NEXT_SUFFIX=$CURRENT_SUFFIX
+            elif [ "$ASSET_COUNT" -lt 11 ]; then
+              echo "Latest release $LATEST_RELEASE is incomplete; refusing to overwrite or skip it."
+              exit 1
+            else
+              NEXT_SUFFIX=$((LATEST_SUFFIX + 1))
             fi
           fi
           NEW_VERSION="v.${VERSION_BASE}.$(printf '%03d' "$NEXT_SUFFIX")"
