@@ -25,37 +25,37 @@ jobs:
         with:
           ref: master
           fetch-depth: 0
-          token: \${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Version, regenerate branding, and update both branches
         id: prepare
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin master noshare
+          git fetch origin +refs/heads/master:refs/remotes/origin/master +refs/heads/noshare:refs/remotes/origin/noshare
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
           CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
           [[ "$CURRENT_VERSION" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]
-          VERSION_BASE="\${BASH_REMATCH[1]}"
-          CURRENT_SUFFIX=$((10#\${BASH_REMATCH[3]}))
+          VERSION_BASE="${BASH_REMATCH[1]}"
+          CURRENT_SUFFIX=$((10#${BASH_REMATCH[3]}))
           [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]
 
           LATEST_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
             | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
           NEXT_SUFFIX=$CURRENT_SUFFIX
           if [ -n "$LATEST_RELEASE" ] && [[ "$LATEST_RELEASE" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]; then
-            RELEASE_BASE="\${BASH_REMATCH[1]}"
-            RELEASE_SUFFIX=$((10#\${BASH_REMATCH[3]}))
+            RELEASE_BASE="${BASH_REMATCH[1]}"
+            RELEASE_SUFFIX=$((10#${BASH_REMATCH[3]}))
             if [ "$RELEASE_BASE" = "$VERSION_BASE" ] && [ "$NEXT_SUFFIX" -le "$RELEASE_SUFFIX" ]; then
               NEXT_SUFFIX=$((RELEASE_SUFFIX + 1))
             fi
           fi
-          NEW_VERSION="v.\${VERSION_BASE}.$(printf '%03d' "$NEXT_SUFFIX")"
+          NEW_VERSION="v.${VERSION_BASE}.$(printf '%03d' "$NEXT_SUFFIX")"
           NEW_CODE="$CURRENT_CODE"
           if [ "$NEXT_SUFFIX" -gt "$CURRENT_SUFFIX" ]; then NEW_CODE=$((CURRENT_CODE + 1)); fi
           export NEW_VERSION NEW_CODE
@@ -120,16 +120,16 @@ jobs:
 
       - name: Start master build and create release
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: \${{ steps.prepare.outputs.release_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.prepare.outputs.release_tag }}
         run: gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
 
       - name: Start NoShare build and attach its APK to the same release
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
 
       - name: Summary
         run: |
-          echo "Prepared version: \${{ steps.prepare.outputs.release_tag }}"
+          echo "Prepared version: ${{ steps.prepare.outputs.release_tag }}"
           echo "Master creates the release; NoShare waits and uploads its universal APK to that release."
