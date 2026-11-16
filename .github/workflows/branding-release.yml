@@ -1,6 +1,6 @@
 name: Branding, version and dual APK release
 
-on:
+"on":
   workflow_dispatch:
 
 permissions:
