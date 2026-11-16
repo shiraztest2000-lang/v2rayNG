@@ -155,7 +155,7 @@ jobs:
           if [ "${{ steps.check.outputs.retry }}" = "true" ]; then
             # Reuse the already assigned version and versionCode for an incomplete release retry.
             NEW_VERSION="${{ steps.check.outputs.retry_version }}"
-            NEW_CODE=$(sed -n 's/^[[:space:]]*versionCode = \\([0-9][0-9]*\\).*/\\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+            NEW_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
             if ! [[ "$NEW_CODE" =~ ^[0-9]+$ ]]; then
               echo "Could not read versionCode for the pending release retry."
               exit 1
@@ -168,7 +168,7 @@ jobs:
             if [ -n "$PREVIOUS_RELEASE" ]; then
               LAST_SUFFIX="${PREVIOUS_RELEASE##*.}"
             else
-              CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "v\\?\\([^"]*\\)".*/\\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+              CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "v\?\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
               LAST_SUFFIX="${CURRENT_VERSION##*.}"
             fi
             if ! [[ "$LAST_SUFFIX" =~ ^[0-9]+$ ]]; then
@@ -179,7 +179,7 @@ jobs:
             VERSION_BASE="${UPSTREAM_TAG#v}"
             NEW_VERSION="v.${VERSION_BASE}.${NEXT_SUFFIX}"
 
-            CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \\([0-9][0-9]*\\).*/\\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+            CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
             if ! [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]; then
               echo "Could not read versionCode after applying اصلاحات شاخه master."
               exit 1
