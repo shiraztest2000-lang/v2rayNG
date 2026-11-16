@@ -37,8 +37,6 @@ This fork keeps its own application identity, release workflow, and project docu
 
 **Current version: v.2.4.1.002**
 
-Choose the APK that matches your device architecture and distribution. The F-Droid build uses its own application ID suffix and can be installed separately from the Play Store build.
-
 ### Supported features
 
 SHZv2rayNG is based on v2rayNG and retains its supported connection types and core integrations, including:
@@ -96,8 +94,6 @@ SHZv2rayNG is an **unofficial fork**. It is not the official v2rayNG project and
 ### دانلود
 
 **نسخه فعلی: v.2.4.1.002**
-
-هنگام دانلود، فایل متناسب با معماری پردازنده دستگاه و نوع توزیع را انتخاب کنید. نسخه F-Droid شناسه نصب جداگانه‌ای دارد و می‌تواند در کنار نسخه Play Store نصب شود.
 
 ### قابلیت‌ها
 
