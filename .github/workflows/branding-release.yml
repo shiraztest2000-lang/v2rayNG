@@ -2,11 +2,6 @@ name: Branding, version and dual APK release
 
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - branding/SHZv2rayNG-logo.png
-      - scripts/update_branding_assets.py
 
 permissions:
   contents: write
