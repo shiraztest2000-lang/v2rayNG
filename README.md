@@ -35,9 +35,7 @@ This fork keeps its own application identity, release workflow, and project docu
 
 ### Download
 
-**Current version: v.2.4.1.002**
-
-### Supported features
+**Current version: v.2.4.1.003**
 
 SHZv2rayNG is based on v2rayNG and retains its supported connection types and core integrations, including:
 
@@ -93,9 +91,7 @@ SHZv2rayNG is an **unofficial fork**. It is not the official v2rayNG project and
 
 ### دانلود
 
-**نسخه فعلی: v.2.4.1.002**
-
-### قابلیت‌ها
+**نسخه فعلی: v.2.4.1.003**
 
 SHZv2rayNG بر پایه v2rayNG ساخته شده و قابلیت‌های اتصال و هسته‌های پشتیبانی‌شده در پروژه اصلی را حفظ می‌کند؛ از جمله:
 
