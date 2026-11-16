@@ -1,0 +1,135 @@
+name: Branding, version and dual APK release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - branding/SHZv2rayNG-logo.png
+      - scripts/update_branding_assets.py
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: shz-branding-dual-release
+  cancel-in-progress: false
+
+jobs:
+  prepare-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+          token: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Version, regenerate branding, and update both branches
+        id: prepare
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master noshare
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+          CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
+          [[ "$CURRENT_VERSION" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]
+          VERSION_BASE="\${BASH_REMATCH[1]}"
+          CURRENT_SUFFIX=$((10#\${BASH_REMATCH[3]}))
+          [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]
+
+          LATEST_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
+          NEXT_SUFFIX=$CURRENT_SUFFIX
+          if [ -n "$LATEST_RELEASE" ] && [[ "$LATEST_RELEASE" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]; then
+            RELEASE_BASE="\${BASH_REMATCH[1]}"
+            RELEASE_SUFFIX=$((10#\${BASH_REMATCH[3]}))
+            if [ "$RELEASE_BASE" = "$VERSION_BASE" ] && [ "$NEXT_SUFFIX" -le "$RELEASE_SUFFIX" ]; then
+              NEXT_SUFFIX=$((RELEASE_SUFFIX + 1))
+            fi
+          fi
+          NEW_VERSION="v.\${VERSION_BASE}.$(printf '%03d' "$NEXT_SUFFIX")"
+          NEW_CODE="$CURRENT_CODE"
+          if [ "$NEXT_SUFFIX" -gt "$CURRENT_SUFFIX" ]; then NEW_CODE=$((CURRENT_CODE + 1)); fi
+          export NEW_VERSION NEW_CODE
+
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          p = Path("V2rayNG/app/build.gradle.kts")
+          s = p.read_text()
+          s, c = re.subn(r'(?m)^(\s*versionCode\s*=\s*)\d+', lambda m: m.group(1)+os.environ["NEW_CODE"], s, count=1)
+          s, v = re.subn(r'(?m)^(\s*versionName\s*=\s*)"[^"]+"', lambda m: m.group(1)+'"'+os.environ["NEW_VERSION"]+'"', s, count=1)
+          if c != 1 or v != 1: raise SystemExit("Master version declarations not found exactly once.")
+          p.write_text(s)
+          readme = Path("README.md")
+          if readme.exists():
+              t = readme.read_text()
+              t = re.sub(r'(?m)^(\*\*Current version:\s*)[^ ]+.*$', lambda m: m.group(1)+os.environ["NEW_VERSION"]+"**", t)
+              t = re.sub(r'(?m)^(\*\*نسخه فعلی:\s*)[^ ]+.*$', lambda m: m.group(1)+os.environ["NEW_VERSION"]+"**", t)
+              readme.write_text(t)
+          PY
+          python3 -m pip install --user Pillow
+          python3 scripts/update_branding_assets.py
+          git add V2rayNG/app/build.gradle.kts README.md V2rayNG/app/src/main/ic_launcher-web.png V2rayNG/app/src/main/res/mipmap-* fastlane/metadata/android/en-US/images/icon.png
+          git diff --cached --check
+          git commit -m "release: prepare SHZv2rayNG $NEW_VERSION"
+          MASTER_SHA=$(git rev-parse HEAD)
+
+          NOSHARE_DIR="$RUNNER_TEMP/noshare"
+          git worktree add --detach "$NOSHARE_DIR" origin/noshare
+          cd "$NOSHARE_DIR"
+          python3 -m pip install --user Pillow
+          export NEW_VERSION NEW_CODE
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          p = Path("V2rayNG/app/build.gradle.kts")
+          s = p.read_text()
+          s, c = re.subn(r'(?m)^(\s*versionCode\s*=\s*)\d+', lambda m: m.group(1)+os.environ["NEW_CODE"], s, count=1)
+          s, v = re.subn(r'(?m)^(\s*versionName\s*=\s*)"[^"]+"', lambda m: m.group(1)+'"'+os.environ["NEW_VERSION"]+'"', s, count=1)
+          if c != 1 or v != 1: raise SystemExit("NoShare version declarations not found exactly once.")
+          p.write_text(s)
+          readme = Path("README.md")
+          if readme.exists():
+              t = readme.read_text()
+              t = re.sub(r'(?m)^(\*\*Current version:\s*)[^ ]+.*$', lambda m: m.group(1)+os.environ["NEW_VERSION"]+"**", t)
+              t = re.sub(r'(?m)^(\*\*نسخه فعلی:\s*)[^ ]+.*$', lambda m: m.group(1)+os.environ["NEW_VERSION"]+"**", t)
+              readme.write_text(t)
+          PY
+          python3 scripts/update_branding_assets.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add V2rayNG/app/build.gradle.kts README.md V2rayNG/app/src/main/ic_launcher-web.png V2rayNG/app/src/main/res/mipmap-* fastlane/metadata/android/en-US/images/icon.png
+          git diff --cached --check
+          git commit -m "release: prepare SHZv2rayNG NoShare $NEW_VERSION"
+          NOSHARE_SHA=$(git rev-parse HEAD)
+
+          cd "$GITHUB_WORKSPACE"
+          git push --atomic origin "$MASTER_SHA:refs/heads/master" "$NOSHARE_SHA:refs/heads/noshare"
+          echo "release_tag=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "master_sha=$MASTER_SHA" >> "$GITHUB_OUTPUT"
+          echo "noshare_sha=$NOSHARE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Start master build and create release
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: \${{ steps.prepare.outputs.release_tag }}
+        run: gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
+
+      - name: Start NoShare build and attach its APK to the same release
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
+
+      - name: Summary
+        run: |
+          echo "Prepared version: \${{ steps.prepare.outputs.release_tag }}"
+          echo "Master creates the release; NoShare waits and uploads its universal APK to that release."
