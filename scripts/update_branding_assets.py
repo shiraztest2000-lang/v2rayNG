@@ -43,3 +43,5 @@ for path in sorted(set(targets)):
 if not updated:
     raise SystemExit("No branding assets were updated.")
 print("Updated SHZv2rayNG branding assets:\n" + "\n".join(updated))
+
+# Trigger the automated dual-branch branding and release workflow.
