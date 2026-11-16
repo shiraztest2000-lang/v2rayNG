@@ -151,3 +151,6 @@ SHZv2rayNG یک **فورک غیررسمی** است؛ پروژه رسمی v2rayNG
 [Repository](https://github.com/shiraztest2000-lang/v2rayNG) · [Releases](https://github.com/shiraztest2000-lang/v2rayNG/releases) · [Issues](https://github.com/shiraztest2000-lang/v2rayNG/issues)
 
 </div>
+
+
+> Branding note: launcher, adaptive, banner, web, and store icon variants are regenerated from the canonical logo while preserving each asset's original pixel dimensions.
