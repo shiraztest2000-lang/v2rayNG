@@ -35,9 +35,7 @@ This fork keeps its own application identity, release workflow, and project docu
 
 ### Download
 
-**Current version: `v.2.4.1.002`**
-
-- [Download the latest SHZv2rayNG release](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
+**Current version: v.2.4.1.002**
 - [Browse all releases and APK variants](https://github.com/shiraztest2000-lang/v2rayNG/releases)
 
 Choose the APK that matches your device architecture and distribution. The F-Droid build uses its own application ID suffix and can be installed separately from the Play Store build.
@@ -98,9 +96,7 @@ SHZv2rayNG is an **unofficial fork**. It is not the official v2rayNG project and
 
 ### دانلود
 
-**نسخه فعلی: `v.2.4.1.002`**
-
-- [دانلود آخرین نسخه SHZv2rayNG](https://github.com/shiraztest2000-lang/v2rayNG/releases/latest)
+**نسخه فعلی: v.2.4.1.002**
 - [مشاهده تمام نسخه‌ها و فایل‌های APK](https://github.com/shiraztest2000-lang/v2rayNG/releases)
 
 هنگام دانلود، فایل متناسب با معماری پردازنده دستگاه و نوع توزیع را انتخاب کنید. نسخه F-Droid شناسه نصب جداگانه‌ای دارد و می‌تواند در کنار نسخه Play Store نصب شود.
