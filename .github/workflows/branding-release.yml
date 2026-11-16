@@ -12,7 +12,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: shz-dual-release-pipeline
+  group: shz-branding-dual-release
   cancel-in-progress: false
 
 jobs:
@@ -39,46 +39,26 @@ jobs:
 
           CURRENT_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
           CURRENT_CODE=$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\).*/\1/p' V2rayNG/app/build.gradle.kts | head -n 1)
-          if ! [[ "$CURRENT_VERSION" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]; then
-            echo "Invalid current versionName: $CURRENT_VERSION"
-            exit 1
-          fi
+          [[ "$CURRENT_VERSION" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]
           VERSION_BASE="${BASH_REMATCH[1]}"
           CURRENT_SUFFIX=$((10#${BASH_REMATCH[3]}))
-          if ! [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]; then
-            echo "Invalid current versionCode: $CURRENT_CODE"
-            exit 1
-          fi
+          [[ "$CURRENT_CODE" =~ ^[0-9]+$ ]]
 
-          # Use the highest numeric three-digit suffix across all SHZ releases.
-          RELEASE_STATE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
-            | jq -r '[.[].tagName | capture("^v\\.(?<base>[0-9]+(\\.[0-9]+)*)\\.(?<suffix>[0-9]{3})$")? \
-              | {tag: ("v." + .base + "." + .suffix), suffix: (.suffix | tonumber)}] \
-              | if length == 0 then "" else max_by(.suffix) | [.tag, (.suffix | tostring)] | @tsv end')
-
+          LATEST_RELEASE=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            | jq -r '[.[] | select(.tagName | test("^v\\.[0-9]+(\\.[0-9]+)*\\.[0-9]{3}$"))] | sort_by(.createdAt) | last | .tagName // empty')
           NEXT_SUFFIX=$CURRENT_SUFFIX
-          if [ -n "$RELEASE_STATE" ]; then
-            IFS=$'\t' read -r LATEST_RELEASE LATEST_SUFFIX <<< "$RELEASE_STATE"
-            ASSET_COUNT=$(gh release view "$LATEST_RELEASE" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length' 2>/dev/null || echo 0)
-            [[ "$ASSET_COUNT" =~ ^[0-9]+$ ]] || ASSET_COUNT=0
-            if [ "$CURRENT_SUFFIX" -gt "$LATEST_SUFFIX" ]; then
-              NEXT_SUFFIX=$CURRENT_SUFFIX
-            elif [ "$CURRENT_VERSION" = "$LATEST_RELEASE" ] && [ "$ASSET_COUNT" -lt 11 ]; then
-              NEXT_SUFFIX=$CURRENT_SUFFIX
-            elif [ "$ASSET_COUNT" -lt 11 ]; then
-              echo "Latest release $LATEST_RELEASE is incomplete; refusing to overwrite or skip it."
-              exit 1
-            else
-              NEXT_SUFFIX=$((LATEST_SUFFIX + 1))
+          if [ -n "$LATEST_RELEASE" ] && [[ "$LATEST_RELEASE" =~ ^v\.([0-9]+(\.[0-9]+)*)\.([0-9]{3})$ ]]; then
+            RELEASE_BASE="${BASH_REMATCH[1]}"
+            RELEASE_SUFFIX=$((10#${BASH_REMATCH[3]}))
+            if [ "$RELEASE_BASE" = "$VERSION_BASE" ] && [ "$NEXT_SUFFIX" -le "$RELEASE_SUFFIX" ]; then
+              NEXT_SUFFIX=$((RELEASE_SUFFIX + 1))
             fi
           fi
-
           NEW_VERSION="v.${VERSION_BASE}.$(printf '%03d' "$NEXT_SUFFIX")"
           NEW_CODE="$CURRENT_CODE"
-          if [ "$NEXT_SUFFIX" -gt "$CURRENT_SUFFIX" ]; then
-            NEW_CODE=$((CURRENT_CODE + 1))
-          fi
+          if [ "$NEXT_SUFFIX" -gt "$CURRENT_SUFFIX" ]; then NEW_CODE=$((CURRENT_CODE + 1)); fi
           export NEW_VERSION NEW_CODE
+
           python3 - <<'PY'
           import os, re
           from pathlib import Path
@@ -137,57 +117,18 @@ jobs:
           echo "master_sha=$MASTER_SHA" >> "$GITHUB_OUTPUT"
           echo "noshare_sha=$NOSHARE_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Build master APKs and wait for successful release publication
+      - name: Start master build and create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.prepare.outputs.release_tag }}
-          MASTER_SHA: ${{ steps.prepare.outputs.master_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
+        run: gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref master -f release_tag="$RELEASE_TAG"
 
-          RUN_ID=""
-          for attempt in $(seq 1 60); do
-            RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch master --event workflow_dispatch --limit 20 --json databaseId,headSha,createdAt \
-              | jq -r --arg sha "$MASTER_SHA" --arg since "$STARTED_AT" '[.[] | select(.headSha == $sha and .createdAt >= $since)] | sort_by(.createdAt) | last | .databaseId // empty')
-            [ -n "$RUN_ID" ] && break
-            sleep 5
-          done
-          if [ -z "$RUN_ID" ]; then
-            echo "Could not find the dispatched master build run."
-            exit 1
-          fi
-          echo "Watching master build run $RUN_ID"
-          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
-
-      - name: Build NoShare APK only after master release succeeds
+      - name: Start NoShare build and attach its APK to the same release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NOSHARE_SHA: ${{ steps.prepare.outputs.noshare_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
-
-          RUN_ID=""
-          for attempt in $(seq 1 60); do
-            RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-noshare.yml --branch noshare --event workflow_dispatch --limit 20 --json databaseId,headSha,createdAt \
-              | jq -r --arg sha "$NOSHARE_SHA" --arg since "$STARTED_AT" '[.[] | select(.headSha == $sha and .createdAt >= $since)] | sort_by(.createdAt) | last | .databaseId // empty')
-            [ -n "$RUN_ID" ] && break
-            sleep 5
-          done
-          if [ -z "$RUN_ID" ]; then
-            echo "Could not find the dispatched NoShare build run."
-            exit 1
-          fi
-          echo "Watching NoShare build run $RUN_ID"
-          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+        run: gh workflow run build-noshare.yml --repo "$GITHUB_REPOSITORY" --ref noshare
 
       - name: Summary
         run: |
           echo "Prepared version: ${{ steps.prepare.outputs.release_tag }}"
-          echo "Master build and release must succeed before NoShare starts."
-          echo "This workflow reports failure if either build fails."
+          echo "Master creates the release; NoShare waits and uploads its universal APK to that release."
