@@ -35,9 +35,7 @@ This fork keeps its own application identity, release workflow, and project docu
 
 ### Download
 
-**Current version: v.2.4.1.003**
-
-SHZv2rayNG is based on v2rayNG and retains its supported connection types and core integrations, including:
+**Current version: v.2.4.1.004**
 
 - Xray core and v2fly core support, as provided by the upstream project.
 - Importing configurations from clipboard, QR code, local files, and supported share links.
@@ -91,9 +89,7 @@ SHZv2rayNG is an **unofficial fork**. It is not the official v2rayNG project and
 
 ### دانلود
 
-**نسخه فعلی: v.2.4.1.003**
-
-SHZv2rayNG بر پایه v2rayNG ساخته شده و قابلیت‌های اتصال و هسته‌های پشتیبانی‌شده در پروژه اصلی را حفظ می‌کند؛ از جمله:
+**نسخه فعلی: v.2.4.1.004**
 
 - پشتیبانی از هسته‌های Xray و v2fly مطابق پروژه اصلی.
 - افزودن کانفیگ از کلیپ‌بورد، QR Code، فایل محلی و لینک‌های اشتراک پشتیبانی‌شده.
