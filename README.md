@@ -27,11 +27,9 @@
 This fork keeps its own application identity, release workflow, and project documentation.
 
 ### What's customized in this fork
-
-- **Dedicated app identity:** displayed name `SHZv2rayNG` and a separate Android application ID (`com.v2ray.ang.shz` for the Play Store build), allowing it to be installed alongside the official v2rayNG app.
+TLS Allow Insecure configuration option
+plus special version which removed all share and edit options
 - **Allow Insecure option:** the TLS `allowInsecure` setting is available in the app's configuration interface. Enabling it disables certificate verification for the relevant connection; use it only when you understand and accept the security implications.
-- **ShirazTipsy branding:** the About entry is branded as `ShirazTipsy`, with fork-specific identification in the app interface.
-- **Independent releases:** APK names, versioning, and release downloads are maintained in this repository.
 
 ### Download
 
@@ -81,11 +79,14 @@ SHZv2rayNG is an **unofficial fork**. It is not the official v2rayNG project and
 این فورک نام، شناسه نصب، روند انتشار نسخه‌ها و مستندات اختصاصی خودش را دارد.
 
 ### تغییرات اختصاصی این فورک
+نسخه برنامه اپدیت شده
+قابلیت Allow Insecureبرای استفاده از کانفیگ های قدیمی بدون مشکل
 
-- **هویت مستقل برنامه:** نام نمایشی برنامه `SHZv2rayNG` است و شناسه نصب نسخه Play Store به `com.v2ray.ang.shz` تغییر کرده است؛ بنابراین امکان نصب در کنار نسخه رسمی v2rayNG وجود دارد.
+و نسخه noshare که تمام گزینه های اشتراک گذاری از ان حذف شده 
+هم در قسمت کانفیگ و نود ها هم در قسمت اشتراک subscriptions
+
+
 - **قابلیت Allow Insecure:** گزینه تنظیم `allowInsecure` مربوط به TLS در رابط تنظیمات برنامه در دسترس است. فعال‌کردن آن بررسی گواهی TLS را برای اتصال مربوطه غیرفعال می‌کند؛ این گزینه فقط در صورت آگاهی از پیامدهای امنیتی و اعتماد به سرور فعال شود.
-- **برند ShirazTipsy:** بخش About با عنوان `ShirazTipsy` مشخص شده و هویت فورک در رابط برنامه نمایش داده می‌شود.
-- **انتشار مستقل:** نام فایل‌های APK، شماره نسخه و فایل‌های انتشار از همین مخزن مدیریت می‌شوند.
 
 ### دانلود
 
@@ -133,6 +134,3 @@ SHZv2rayNG یک **فورک غیررسمی** است؛ پروژه رسمی v2rayNG
 [Repository](https://github.com/shiraztest2000-lang/v2rayNG) · [Releases](https://github.com/shiraztest2000-lang/v2rayNG/releases) · [Issues](https://github.com/shiraztest2000-lang/v2rayNG/issues)
 
 </div>
-
-
-> Branding note: launcher, adaptive, banner, web, and store icon variants are regenerated from the canonical logo while preserving each asset's original pixel dimensions.
